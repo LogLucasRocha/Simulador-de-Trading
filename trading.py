@@ -6,6 +6,8 @@ import plotly.express as px
 from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 import random
+import json
+import os
 
 st.set_page_config(
     page_title="Energy Trading Simulator",
@@ -151,41 +153,257 @@ div[data-testid="stDataFrame"] {
     color: #94a3b8;
 }
 
+.danger-box {
+    background: rgba(251, 113, 133, 0.05);
+    border-left: 3px solid #fb7185;
+    padding: 0.75rem 1rem;
+    border-radius: 0 6px 6px 0;
+    margin: 0.5rem 0;
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
 .mono { font-family: 'JetBrains Mono', monospace; }
 
 hr { border-color: #1e293b; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Estado inicial ────────────────────────────────────────────────────────────
-if 'contratos' not in st.session_state:
-    st.session_state['contratos'] = []
-if 'pld_historico' not in st.session_state:
-    # Gera PLD simulado dos últimos 24 meses
+# ════════════════════════════════════════════════════════════════════════════════
+# PERSISTÊNCIA
+# ════════════════════════════════════════════════════════════════════════════════
+SAVE_FILE = "energy_trader_save.json"
+
+def _serializar_contrato(c):
+    d = dict(c)
+    if isinstance(d.get('data_inicio'), date):
+        d['data_inicio'] = d['data_inicio'].isoformat()
+    if isinstance(d.get('data_fim'), date):
+        d['data_fim'] = d['data_fim'].isoformat()
+    if isinstance(d.get('criado_em'), datetime):
+        d['criado_em'] = d['criado_em'].isoformat()
+    return d
+
+def _desserializar_contrato(d):
+    d = dict(d)
+    if isinstance(d.get('data_inicio'), str):
+        d['data_inicio'] = date.fromisoformat(d['data_inicio'])
+    if isinstance(d.get('data_fim'), str):
+        d['data_fim'] = date.fromisoformat(d['data_fim'])
+    if isinstance(d.get('criado_em'), str):
+        d['criado_em'] = datetime.fromisoformat(d['criado_em'])
+    return d
+
+def salvar_estado():
+    df_hist = st.session_state['pld_historico']
+    payload = {
+        'pld_atual':          st.session_state['pld_atual'],
+        'saldo_caixa':        st.session_state['saldo_caixa'],
+        'pagina':             st.session_state['pagina'],
+        'contratos':          [_serializar_contrato(c) for c in st.session_state['contratos']],
+        'pld_historico': {
+            'datas': [str(d) for d in df_hist['Data'].tolist()],
+            'plds':  df_hist['PLD (R$/MWh)'].tolist(),
+        },
+        # Meteo salvo também
+        'meteo': st.session_state.get('meteo', {}),
+    }
+    with open(SAVE_FILE, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+def carregar_estado():
+    if not os.path.exists(SAVE_FILE):
+        return None
+    try:
+        with open(SAVE_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def resetar_estado():
+    if os.path.exists(SAVE_FILE):
+        os.remove(SAVE_FILE)
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+
+# ════════════════════════════════════════════════════════════════════════════════
+# GERADOR DE DADOS METEOROLÓGICOS SIMULADOS
+# ════════════════════════════════════════════════════════════════════════════════
+def _gerar_meteo_inicial():
+    """Gera séries históricas simuladas de dados meteorológicos e hidrológicos."""
     base_date = date.today().replace(day=1)
     datas = [base_date - relativedelta(months=i) for i in range(23, -1, -1)]
-    plds = []
-    pld_atual = 80.0
-    for _ in datas:
-        pld_atual = max(30, min(500, pld_atual + random.gauss(0, 15)))
-        plds.append(round(pld_atual, 2))
-    st.session_state['pld_historico'] = pd.DataFrame({'Data': datas, 'PLD (R$/MWh)': plds})
-if 'pld_atual' not in st.session_state:
-    st.session_state['pld_atual'] = st.session_state['pld_historico']['PLD (R$/MWh)'].iloc[-1]
-if 'saldo_caixa' not in st.session_state:
-    st.session_state['saldo_caixa'] = 0.0
-if 'pagina' not in st.session_state:
-    st.session_state['pagina'] = 'tutorial'
-if 'tutorial_etapa' not in st.session_state:
-    st.session_state['tutorial_etapa'] = 0
-if 'tutorial_concluido' not in st.session_state:
-    st.session_state['tutorial_concluido'] = False
-if 'missoes_concluidas' not in st.session_state:
-    st.session_state['missoes_concluidas'] = set()
-if 'quiz_respostas' not in st.session_state:
-    st.session_state['quiz_respostas'] = {}
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+    # Reservatório SE/CO (%) — oscila sazonalmente
+    res_seco = []
+    nivel = 65.0
+    for i, d in enumerate(datas):
+        mes = d.month
+        # Período úmido (dez-mar): tende a subir; seco (jun-set): tende a cair
+        tendencia = 3.0 if mes in [12, 1, 2, 3] else -2.5 if mes in [6, 7, 8, 9] else 0.5
+        nivel = max(5, min(100, nivel + tendencia + random.gauss(0, 4)))
+        res_seco.append(round(nivel, 1))
+
+    # Afluência natural (% da MLT — Média de Longo Termo)
+    afluen = []
+    for i, d in enumerate(datas):
+        mes = d.month
+        base_aflu = 130 if mes in [12, 1, 2, 3] else 60 if mes in [6, 7, 8, 9] else 95
+        afluen.append(round(max(10, base_aflu + random.gauss(0, 20)), 1))
+
+    # Precipitação SE/CO (mm/mês)
+    precip = []
+    for d in datas:
+        mes = d.month
+        base_p = 220 if mes in [12, 1, 2, 3] else 30 if mes in [6, 7, 8] else 100
+        precip.append(round(max(0, base_p + random.gauss(0, 30)), 1))
+
+    # Temperatura média SE/CO (°C)
+    temp = []
+    for d in datas:
+        mes = d.month
+        base_t = 28 if mes in [12, 1, 2] else 22 if mes in [6, 7, 8] else 25
+        temp.append(round(base_t + random.gauss(0, 1.5), 1))
+
+    # Geração eólica NE (% capacidade instalada)
+    eolica = []
+    for d in datas:
+        mes = d.month
+        base_e = 70 if mes in [7, 8, 9, 10] else 35 if mes in [1, 2, 3] else 50
+        eolica.append(round(max(5, min(100, base_e + random.gauss(0, 8))), 1))
+
+    # Geração solar (% capacidade instalada)
+    solar = []
+    for d in datas:
+        mes = d.month
+        base_s = 75 if mes in [11, 12, 1, 2] else 55 if mes in [6, 7] else 65
+        solar.append(round(max(10, min(100, base_s + random.gauss(0, 6))), 1))
+
+    return {
+        'datas':     [str(d) for d in datas],
+        'reserv':    res_seco,
+        'afluen':    afluen,
+        'precip':    precip,
+        'temp':      temp,
+        'eolica':    eolica,
+        'solar':     solar,
+    }
+
+def _atualizar_meteo():
+    """Avança os dados meteorológicos em um passo simulado."""
+    m = st.session_state['meteo']
+    hoje = str(date.today())
+
+    # Puxa último valor de cada série e simula nova leitura
+    res   = m['reserv'][-1]
+    aflu  = m['afluen'][-1]
+    prec  = m['precip'][-1]
+    temp  = m['temp'][-1]
+    eol   = m['eolica'][-1]
+    sol   = m['solar'][-1]
+    mes   = date.today().month
+
+    tend_r = 3.0 if mes in [12,1,2,3] else -2.5 if mes in [6,7,8,9] else 0.5
+    novo_res  = round(max(5,  min(100, res  + tend_r        + random.gauss(0, 4)),  ), 1)
+    novo_aflu = round(max(10, min(200, aflu + random.gauss(0, 15))), 1)
+    novo_prec = round(max(0,          prec + random.gauss(0, 25)), 1)
+    novo_temp = round(               temp + random.gauss(0, 0.8),  1)
+    novo_eol  = round(max(5,  min(100, eol  + random.gauss(0, 6)),  ), 1)
+    novo_sol  = round(max(10, min(100, sol  + random.gauss(0, 5)),  ), 1)
+
+    m['datas'].append(hoje)
+    m['reserv'].append(novo_res)
+    m['afluen'].append(novo_aflu)
+    m['precip'].append(novo_prec)
+    m['temp'].append(novo_temp)
+    m['eolica'].append(novo_eol)
+    m['solar'].append(novo_sol)
+
+    st.session_state['meteo'] = m
+
+def _impacto_meteo_no_pld(meteo):
+    """
+    Calcula um multiplicador de impacto no PLD baseado nas condições meteorológicas.
+    Retorna (fator, lista de alertas).
+    """
+    fator   = 1.0
+    alertas = []
+
+    res   = meteo['reserv'][-1]
+    aflu  = meteo['afluen'][-1]
+    eol   = meteo['eolica'][-1]
+    temp  = meteo['temp'][-1]
+
+    # Reservatório baixo → PLD sobe
+    if res < 20:
+        fator += 0.35
+        alertas.append(("🚨", "danger", f"Reservatório crítico ({res:.0f}%) — pressão muito alta sobre o PLD"))
+    elif res < 40:
+        fator += 0.15
+        alertas.append(("⚠️", "warn", f"Reservatório baixo ({res:.0f}%) — risco de elevação do PLD"))
+    elif res > 75:
+        fator -= 0.10
+        alertas.append(("✅", "info", f"Reservatório cheio ({res:.0f}%) — pressão de baixa no PLD"))
+
+    # Afluência baixa → PLD sobe
+    if aflu < 50:
+        fator += 0.20
+        alertas.append(("⚠️", "warn", f"Afluência muito abaixo da MLT ({aflu:.0f}%) — risco hídrico elevado"))
+    elif aflu > 120:
+        fator -= 0.08
+        alertas.append(("✅", "info", f"Afluência acima da MLT ({aflu:.0f}%) — boas condições hídricas"))
+
+    # Boa geração eólica → PLD cai
+    if eol > 65:
+        fator -= 0.06
+        alertas.append(("✅", "info", f"Geração eólica forte ({eol:.0f}%) — contribui para redução do PLD"))
+    elif eol < 25:
+        fator += 0.05
+        alertas.append(("⚠️", "warn", f"Geração eólica fraca ({eol:.0f}%) — menor alívio sobre o sistema"))
+
+    # Temperatura alta → demanda sobe → PLD sobe
+    if temp > 30:
+        fator += 0.08
+        alertas.append(("⚠️", "warn", f"Temperatura elevada ({temp:.1f}°C) — maior demanda de resfriamento"))
+    elif temp < 18:
+        fator -= 0.03
+        alertas.append(("✅", "info", f"Temperatura amena ({temp:.1f}°C) — menor pressão sobre a demanda"))
+
+    return round(fator, 3), alertas
+
+# ── Estado inicial ─────────────────────────────────────────────────────────────
+if 'estado_carregado' not in st.session_state:
+    salvo = carregar_estado()
+
+    if salvo:
+        datas = [date.fromisoformat(d) for d in salvo['pld_historico']['datas']]
+        st.session_state['pld_historico'] = pd.DataFrame({
+            'Data': datas,
+            'PLD (R$/MWh)': salvo['pld_historico']['plds'],
+        })
+        st.session_state['pld_atual']   = salvo['pld_atual']
+        st.session_state['saldo_caixa'] = salvo['saldo_caixa']
+        st.session_state['pagina']      = salvo.get('pagina', 'mercado')
+        st.session_state['contratos']   = [_desserializar_contrato(c) for c in salvo['contratos']]
+        st.session_state['meteo']       = salvo.get('meteo') or _gerar_meteo_inicial()
+    else:
+        st.session_state['contratos']   = []
+        st.session_state['saldo_caixa'] = 0.0
+        st.session_state['pagina']      = 'mercado'
+
+        base_date = date.today().replace(day=1)
+        datas = [base_date - relativedelta(months=i) for i in range(23, -1, -1)]
+        plds, pld_v = [], 80.0
+        for _ in datas:
+            pld_v = max(30, min(500, pld_v + random.gauss(0, 15)))
+            plds.append(round(pld_v, 2))
+        st.session_state['pld_historico'] = pd.DataFrame({'Data': datas, 'PLD (R$/MWh)': plds})
+        st.session_state['pld_atual']     = st.session_state['pld_historico']['PLD (R$/MWh)'].iloc[-1]
+        st.session_state['meteo']         = _gerar_meteo_inicial()
+
+    st.session_state['estado_carregado'] = True
+
+# ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
     <div style='padding: 0.5rem 0 1rem;'>
@@ -247,49 +465,79 @@ with st.sidebar:
         st.markdown(f"<div style='{style}'>", unsafe_allow_html=True)
         if st.button(label, key=f"nav_{key}", use_container_width=True):
             st.session_state['pagina'] = key
+            salvar_estado()
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    nav("🎓  Tutorial",             "tutorial")
-    nav("📊  Painel de Mercado",    "mercado")
-    nav("📋  Novo Contrato",        "novo_contrato")
-    nav("💼  Meu Portfólio",        "portfolio")
-    nav("💰  PnL & Resultado",      "pnl")
-    nav("📚  Glossário",            "glossario")
-
-    missoes = st.session_state.get('missoes_concluidas', set())
-    total_missoes = 5
-    if missoes:
-        prog = len(missoes) / total_missoes
-        st.markdown(f"""
-        <div style='margin-top:0.5rem; padding: 0.6rem 0.75rem; background:#111827;
-                    border:1px solid #1e293b; border-radius:6px;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem;
-                        color:#475569; text-transform:uppercase; margin-bottom:4px;'>
-                Tutorial — {len(missoes)}/{total_missoes} missoes
-            </div>
-            <div style='background:#1e293b; border-radius:3px; height:4px;'>
-                <div style='background:#00d4aa; width:{int(prog*100)}%; height:4px; border-radius:3px;'></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    nav("📊  Painel de Mercado",  "mercado")
+    nav("🌦️  Meteorologia",       "meteo")
+    nav("📋  Novo Contrato",      "novo_contrato")
+    nav("💼  Meu Portfólio",      "portfolio")
+    nav("💰  PnL & Resultado",    "pnl")
+    nav("📚  Glossário",          "glossario")
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    if st.button("🔄  Atualizar PLD", use_container_width=True):
-        novo_pld = max(30, min(500, st.session_state['pld_atual'] + random.gauss(0, 12)))
+
+    if st.button("🔄  Atualizar Mercado", use_container_width=True):
+        # Atualiza PLD levando em conta condições meteorológicas
+        fator_meteo, _ = _impacto_meteo_no_pld(st.session_state['meteo'])
+        ruido = random.gauss(0, 12)
+        # Fator meteo empurra o PLD para cima ou para baixo da média
+        pld_medio = st.session_state['pld_historico']['PLD (R$/MWh)'].mean()
+        pressao = (pld_medio * fator_meteo - st.session_state['pld_atual']) * 0.08
+        novo_pld = max(30, min(500, st.session_state['pld_atual'] + ruido + pressao))
         st.session_state['pld_atual'] = round(novo_pld, 2)
         nova_linha = pd.DataFrame({'Data': [date.today()], 'PLD (R$/MWh)': [round(novo_pld, 2)]})
         st.session_state['pld_historico'] = pd.concat(
             [st.session_state['pld_historico'], nova_linha], ignore_index=True
         )
-        # Recalcula PnL de todos os contratos
+        _atualizar_meteo()
         for c in st.session_state['contratos']:
             _recalc_pnl(c)
+        salvar_estado()
         st.rerun()
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    col_save, col_reset = st.columns(2)
+    with col_save:
+        if st.button("💾  Salvar", use_container_width=True):
+            salvar_estado()
+            st.toast("✅ Progresso salvo!", icon="💾")
+    with col_reset:
+        if st.button("🗑️  Resetar", use_container_width=True):
+            st.session_state['confirmar_reset'] = True
+
+    if st.session_state.get('confirmar_reset'):
+        st.markdown("""
+        <div style='background:rgba(251,113,133,0.08); border:1px solid rgba(251,113,133,0.3);
+                    border-radius:6px; padding:0.6rem 0.75rem; margin-top:0.25rem;
+                    font-family:JetBrains Mono,monospace; font-size:0.72rem; color:#fb7185;'>
+            Tem certeza? Isso apaga todos os dados.
+        </div>
+        """, unsafe_allow_html=True)
+        col_sim, col_nao = st.columns(2)
+        with col_sim:
+            if st.button("Sim", key="reset_sim", use_container_width=True):
+                resetar_estado()
+                st.rerun()
+        with col_nao:
+            if st.button("Não", key="reset_nao", use_container_width=True):
+                st.session_state['confirmar_reset'] = False
+                st.rerun()
+
+    if os.path.exists(SAVE_FILE):
+        mtime = datetime.fromtimestamp(os.path.getmtime(SAVE_FILE))
+        st.markdown(f"""
+        <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem;
+                    color:#334155; text-align:center; margin-top:0.4rem;'>
+            último save {mtime.strftime('%d/%m %H:%M')}
+        </div>
+        """, unsafe_allow_html=True)
 
 pagina = st.session_state['pagina']
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
 def _recalc_pnl(contrato):
     pld = st.session_state['pld_atual']
     preco = contrato['preco']
@@ -311,600 +559,6 @@ TIPOS_ENERGIA = ["Convencional", "Incentivada 50%", "Incentivada 100%"]
 INDICES = ["Preço Fixo", "PLD Spot", "PLD Médio Mensal", "IPCA + Spread", "IGP-M + Spread"]
 
 # ════════════════════════════════════════════════════════════════════════════════
-# TUTORIAL
-# ════════════════════════════════════════════════════════════════════════════════
-if pagina == 'tutorial':
-
-    missoes = st.session_state['missoes_concluidas']
-    etapa   = st.session_state['tutorial_etapa']
-
-    ETAPAS = [
-        {
-            "titulo": "Bem-vindo ao Mercado Livre de Energia",
-            "icone": "⚡",
-            "cor": "#00d4aa",
-            "conteudo": """
-O **Mercado Livre de Energia** (ACL — Ambiente de Contratação Livre) é onde grandes consumidores,
-geradores e comercializadores negociam energia elétrica livremente, sem as restrições do mercado regulado.
-
-**Por que existe o Mercado Livre?**
-No Brasil, o setor elétrico é dividido em dois ambientes:
-- **ACR (Regulado)**: distribuidoras compram energia em leilões para abastecer residências e pequenas empresas.
-- **ACL (Livre)**: consumidores acima de 500 kW negociam diretamente com geradores e comercializadores.
-
-**Quem são os agentes?**
-| Agente | Papel |
-|--------|-------|
-| 🏭 Gerador | Produz energia (hidro, eólica, solar, termo...) |
-| 🔄 Comercializador | Compra e revende energia, fazendo a intermediação |
-| 🏢 Consumidor Livre | Compra energia diretamente, sem a distribuidora |
-| ⚖️ CCEE | Câmara que administra o mercado e liquida as diferenças |
-
-**O papel do PLD:**
-O **PLD (Preço de Liquidação das Diferenças)** é o preço do mercado spot, calculado semanalmente pela CCEE.
-Ele reflete o custo de gerar mais energia naquele momento — se os reservatórios estão cheios, o PLD é baixo;
-se estão vazios e é preciso ligar termoelétricas caras, o PLD sobe.
-            """,
-            "missao": None,
-            "quiz": {
-                "pergunta": "O que significa ACL?",
-                "opcoes": [
-                    "Ambiente de Contratação Livre",
-                    "Agência de Controle de Licitações",
-                    "Associação de Comercialização de Luz",
-                    "Acordo de Custo e Liquidez"
-                ],
-                "correta": 0,
-                "explicacao": "ACL = Ambiente de Contratação Livre, onde consumidores acima de 500 kW negociam energia diretamente."
-            }
-        },
-        {
-            "titulo": "Entendendo o PLD",
-            "icone": "📈",
-            "cor": "#60a5fa",
-            "conteudo": """
-O **PLD** é o coração do mercado spot de energia. Entender seu comportamento é essencial para qualquer trader.
-
-**Como o PLD é calculado?**
-O PLD é derivado do **CMO (Custo Marginal de Operação)** — o custo de atender mais uma unidade de demanda.
-O modelo computacional (NEWAVE/DECOMP) simula o sistema elétrico e encontra esse custo ótimo.
-
-**O que influencia o PLD?**
-
-🌧️ **Hidrologia**: Chuvas enchendo reservatórios → PLD cai. Seca → PLD sobe.
-
-⚡ **Demanda**: Alta demanda (verão quente, economia aquecida) → PLD sobe.
-
-🔥 **Termelétricas**: Quando acionadas, adicionam custo e elevam o PLD.
-
-🌬️ **Renováveis**: Muita geração eólica/solar reduz a necessidade de outras fontes → PLD cai.
-
-**Os 4 Submercados:**
-O Brasil tem 4 submercados com PLDs diferentes por causa das restrições de transmissão entre regiões:
-
-| Submercado | Sigla | Característica |
-|-----------|-------|---------------|
-| Sudeste/Centro-Oeste | SE/CO | Principal referência |
-| Sul | S | Influenciado pelo vento e hidrologia sulina |
-| Nordeste | NE | Alto potencial eólico |
-| Norte | N | Grandes hidrelétricas (Tucuruí, Belo Monte) |
-
-**Faixas históricas do PLD:**
-- Mínimo regulatório: **R$ 30/MWh** (pode variar por regulação)
-- Máximo regulatório: **R$ 500+/MWh** (em crises hídricas)
-- Valor "normal": entre **R$ 70–200/MWh**
-            """,
-            "missao": {
-                "id": "missao_pld",
-                "titulo": "Missão 1: Observe o PLD",
-                "descricao": "Vá até o **Painel de Mercado**, clique em **Atualizar PLD** na sidebar 3 vezes e observe como o valor muda.",
-                "verificacao": "pld_atualizado",
-                "dica": "O botão 'Atualizar PLD' fica no rodapé da barra lateral esquerda."
-            },
-            "quiz": {
-                "pergunta": "Quando ocorre uma seca severa nos reservatórios, o que tende a acontecer com o PLD?",
-                "opcoes": [
-                    "O PLD cai, pois há menos energia disponível",
-                    "O PLD sobe, pois é necessário acionar termelétricas mais caras",
-                    "O PLD não muda, pois é calculado só pela demanda",
-                    "O PLD vai a zero para incentivar o consumo"
-                ],
-                "correta": 1,
-                "explicacao": "Com reservatórios baixos, o sistema precisa acionar termelétricas, que têm custo de combustível elevado. Isso eleva o CMO e consequentemente o PLD."
-            }
-        },
-        {
-            "titulo": "Contratos Bilaterais e Estratégias",
-            "icone": "📋",
-            "cor": "#a78bfa",
-            "conteudo": """
-No ACL, a principal ferramenta do trader é o **contrato bilateral** — um acordo direto entre duas partes.
-
-**Anatomia de um Contrato:**
-
-```
-Comprador: Empresa X
-Vendedor:  Geradora Solar ABC
-Preço:     R$ 120/MWh (FIXO)
-Volume:    5 MW médios
-Período:   Jan/2025 a Dez/2025
-Submercado: SE/CO
-Energia:   Incentivada 50%
-```
-
-**Estratégias básicas:**
-
-**🟢 COMPRA (Long)**
-Você trava um preço de compra esperando que o PLD suba acima dele.
-- Lucro: PLD > Preço contratado
-- Prejuízo: PLD < Preço contratado
-
-Exemplo: Comprei a R$ 100/MWh. PLD foi a R$ 150/MWh.
-Ganho = (150 − 100) × volume = R$ 50/MWh × volume
-
-**🔴 VENDA (Short)**
-Você trava um preço de venda esperando que o PLD caia abaixo dele.
-- Lucro: PLD < Preço contratado
-- Prejuízo: PLD > Preço contratado
-
-Exemplo: Vendi a R$ 120/MWh. PLD caiu para R$ 80/MWh.
-Ganho = (120 − 80) × volume = R$ 40/MWh × volume
-
-**⚖️ Posição Líquida (Hedge)**
-Um comercializador pode **comprar de geradores** e **vender para consumidores**,
-ficando com uma posição equilibrada. O lucro vem do **spread** entre os dois preços.
-
-**Índices de reajuste:**
-- **Preço Fixo**: preço não muda durante o contrato
-- **PLD Spot**: preço varia com o mercado (máxima exposição)
-- **IPCA/IGP-M + Spread**: indexado à inflação (mais comum em contratos longos)
-            """,
-            "missao": {
-                "id": "missao_contrato",
-                "titulo": "Missão 2: Registre seu primeiro contrato",
-                "descricao": "Vá até **Novo Contrato** e registre um contrato de **Compra** de qualquer volume e preço.",
-                "verificacao": "tem_contrato",
-                "dica": "Preencha pelo menos o nome do contrato e clique em 'Registrar Contrato'."
-            },
-            "quiz": {
-                "pergunta": "Você comprou energia a R$ 90/MWh. O PLD atual é R$ 130/MWh. Qual é o seu PnL por MWh?",
-                "opcoes": [
-                    "−R$ 40/MWh (prejuízo)",
-                    "+R$ 40/MWh (lucro)",
-                    "+R$ 130/MWh",
-                    "Zero, pois o preço foi fixado"
-                ],
-                "correta": 1,
-                "explicacao": "Na posição comprada: PnL = PLD − Preço = 130 − 90 = +R$ 40/MWh. Você comprou barato e pode liquidar mais caro no spot."
-            }
-        },
-        {
-            "titulo": "Mark to Market e PnL",
-            "icone": "💰",
-            "cor": "#f59e0b",
-            "conteudo": """
-**Mark to Market (MtM)** é a reavaliação dos contratos a preços correntes de mercado.
-Em vez de esperar o vencimento, você sabe *hoje* quanto valeria liquidar tudo.
-
-**Fórmula do PnL MtM:**
-
-Para posição **comprada**:
-```
-PnL = (PLD atual − Preço contratado) × Volume (MWh)
-```
-
-Para posição **vendida**:
-```
-PnL = (Preço contratado − PLD atual) × Volume (MWh)
-```
-
-**Exemplo prático:**
-
-| Contrato | Tipo | Preço | PLD atual | Volume | PnL |
-|---------|------|-------|-----------|--------|-----|
-| CTR-001 | Compra | R$ 100 | R$ 140 | 1.000 MWh | +R$ 40.000 |
-| CTR-002 | Venda | R$ 160 | R$ 140 | 500 MWh | +R$ 10.000 |
-| **Total** | | | | | **+R$ 50.000** |
-
-**Gross-up de PIS/COFINS:**
-Quando um contrato inclui impostos embutidos, aplica-se o gross-up:
-
-```
-Preço gross-upado = Preço líquido / (1 − 9,25%)
-Preço gross-upado = Preço líquido × 1,1025...
-```
-
-Exemplo: Preço líquido R$ 100 → Gross-upado ≈ R$ 110,25/MWh
-
-**Por que o gross-up importa?**
-No Book de trading, os preços são comparados com a curva de mercado que já embute impostos.
-Sem o gross-up, você estaria comparando preços em bases diferentes — como comparar preços com e sem IVA.
-
-**Delta e sensibilidade:**
-O **delta** indica quanto seu PnL muda para cada R$ 1 de variação no PLD.
-- Posição comprada de 1.000 MWh → Delta = +1.000 (PLD sobe R$1 = ganho de R$1.000)
-- Posição vendida de 500 MWh → Delta = −500 (PLD sobe R$1 = perda de R$500)
-            """,
-            "missao": {
-                "id": "missao_pnl",
-                "titulo": "Missao 3: Analise o PnL",
-                "descricao": "Com pelo menos 1 contrato registrado, acesse **PnL & Resultado** e use o slider para simular o PLD em R$ 200/MWh.",
-                "verificacao": "tem_contrato",
-                "dica": "Na pagina PnL & Resultado, ha um slider de cenario hipotetico."
-            },
-            "quiz": {
-                "pergunta": "Você tem posição vendida de 2.000 MWh a R$ 150/MWh. O PLD subiu para R$ 180/MWh. Qual o impacto?",
-                "opcoes": [
-                    "+R$ 60.000 (lucro, pois vendeu caro)",
-                    "−R$ 60.000 (prejuízo, pois o mercado foi contra)",
-                    "+R$ 30.000",
-                    "Zero, pois o preço de venda já estava fixado"
-                ],
-                "correta": 1,
-                "explicacao": "Posição vendida: PnL = (Preço − PLD) × Volume = (150 − 180) × 2000 = −R$ 60.000. Você vendeu a R$150 mas o mercado foi a R$180 — se precisar recomprar, pagará mais caro."
-            }
-        },
-        {
-            "titulo": "Energia Incentivada e Estratégias Avancadas",
-            "icone": "🌿",
-            "cor": "#34d399",
-            "conteudo": """
-**Energia Incentivada** é gerada por fontes renováveis (solar, eólica, PCH, biomassa) e possui
-desconto na TUSD/TUST — a tarifa de uso do sistema de transmissão e distribuição.
-
-**Tipos e descontos:**
-| Tipo | Desconto TUSD/TUST | Migração a partir de |
-|------|-------------------|---------------------|
-| Incentivada 100% | 100% | 30 kW de demanda |
-| Incentivada 50% | 50% | 500 kW de demanda |
-| Convencional | 0% | 500 kW de demanda |
-
-**Por que o consumidor prefere energia incentivada?**
-O desconto na tarifa de transporte pode representar 30–50% da conta de energia total.
-Isso permite que o consumidor pague mais pelo MWh no contrato e ainda assim economize.
-
-**Estratégias de portfólio:**
-
-**📦 Book Balanceado (Flat Book)**
-Objetivo: posição líquida = 0 MW. Lucro vem apenas do spread compra/venda.
-- Risco: baixo (não depende da direção do PLD)
-- Ideal para: comercializadores que buscam margem previsível
-
-**📈 Book Direcional**
-Objetivo: manter posição comprada ou vendida esperando movimento do PLD.
-- Risco: alto (depende de acertar a direção)
-- Ideal para: traders com visão de mercado
-
-**🔀 Arbitragem Submercado**
-Comprar energia barata em um submercado e vender em outro mais caro.
-- Risco: médio (depende de restrições de transmissão)
-
-**⏱️ Arbitragem Temporal**
-Comprar energia para entrega futura esperando que o preço spot suba.
-- Comum em períodos pré-seca (comprar no úmido, vender no seco)
-
-**Gestão de Risco — Regras de ouro:**
-1. Nunca fique com posição muito direcional sem stop-loss definido
-2. Monitore o PLD diariamente — uma crise hídrica pode mover centenas de R$/MWh em dias
-3. Diversifique entre submercados e tipos de energia
-4. Contratos de longo prazo = menor risco de PLD, maior risco de crédito da contraparte
-            """,
-            "missao": {
-                "id": "missao_avancado",
-                "titulo": "Missao 4: Monte um portfolio equilibrado",
-                "descricao": "Registre pelo menos **2 contratos** — um de Compra e um de Venda — para montar uma posicao parcialmente hedgeada.",
-                "verificacao": "tem_compra_e_venda",
-                "dica": "Va em Novo Contrato duas vezes, escolhendo tipos diferentes (Compra e Venda)."
-            },
-            "quiz": {
-                "pergunta": "Qual a vantagem da energia incentivada 100% para o consumidor?",
-                "opcoes": [
-                    "O MWh é sempre mais barato no contrato",
-                    "100% de desconto na tarifa de uso da rede (TUSD/TUST)",
-                    "Isenção total de impostos federais",
-                    "Garantia de fornecimento em qualquer situação"
-                ],
-                "correta": 1,
-                "explicacao": "A energia incentivada 100% garante desconto total na TUSD/TUST, que pode representar grande parte da conta. Isso reduz o custo total mesmo que o MWh no contrato seja um pouco mais caro."
-            }
-        },
-        {
-            "titulo": "Desafio Final: Simule uma Crise Hidrica",
-            "icone": "🏆",
-            "cor": "#f472b6",
-            "conteudo": """
-Você chegou ao módulo final! Vamos simular um cenário real do mercado brasileiro.
-
-**Cenário: Crise Hídrica 2021**
-
-Em 2021, o Brasil enfrentou a pior seca em 91 anos. Os reservatórios caíram para menos de 20% da capacidade.
-O PLD disparou para o valor máximo regulatório (então R$ 583/MWh).
-
-**O que aconteceu com os traders?**
-
-✅ **Vencedores**: Comercializadores que tinham **posição vendida** (venderam caro antes) ou que compraram
-energia barata no passado e revenderam no spot com enorme margem.
-
-❌ **Perdedores**: Consumidores com contratos indexados ao PLD spot pagaram contas absurdas.
-Comercializadores com posição comprada a preços altos esperando queda do PLD sofreram enormes prejuízos.
-
-**Lições aprendidas:**
-
-1. **Nunca ficar 100% exposto ao spot** sem hedge. Uma seca pode triplicar sua conta.
-2. **Contratos de longo prazo** protegem contra volatilidade extrema.
-3. **Diversificação de fontes** (eólica no NE não sofre com seca na SE/CO) reduz risco sistêmico.
-4. **Reserva de margem** para cobrir variações de MtM é essencial.
-
-**Como usar este simulador para aprender:**
-
-| Ação | Aprendizado |
-|------|------------|
-| Registre contratos de compra com PLD baixo | Veja o lucro quando o PLD sobe |
-| Registre contratos de venda com PLD alto | Veja o lucro quando o PLD cai |
-| Use o slider de cenário no PnL | Entenda a sensibilidade do portfólio |
-| Clique em Atualizar PLD repetidamente | Simule a volatilidade do mercado |
-| Monte posição comprada + vendida | Veja como o hedge reduz o risco |
-
-**Próximos passos reais:**
-- Estude o relatório semanal do ONS (Operador Nacional do Sistema)
-- Acompanhe as previsões de afluência da CCEE
-- Leia os boletins do EPE (Empresa de Pesquisa Energética)
-- Pratique no simulador montando diferentes estratégias de portfólio
-            """,
-            "missao": {
-                "id": "missao_final",
-                "titulo": "Missao Final: Simule a crise",
-                "descricao": "Em **PnL & Resultado**, use o slider e coloque o PLD em **R$ 500/MWh**. Analise o impacto no seu portfolio e veja se sua posicao sobreviveria a uma crise hidrica.",
-                "verificacao": "tem_contrato",
-                "dica": "Va para PnL & Resultado e arraste o slider de cenario ate R$ 500."
-            },
-            "quiz": None
-        },
-    ]
-
-    # ── Header ──────────────────────────────────────────────────────────────
-    st.markdown("""
-    <div style='display:flex; align-items:center; gap:1rem; margin-bottom:0.5rem;'>
-        <div style='font-family:Syne,sans-serif; font-size:2rem; font-weight:800;
-                    background: linear-gradient(90deg, #00d4aa, #60a5fa);
-                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>
-            🎓 Tutorial Completo
-        </div>
-    </div>
-    <p style='color:#475569; font-size:0.9rem; margin-top:-0.25rem; margin-bottom:1.5rem;'>
-        Aprenda o mercado livre de energia do zero, com teoria, exemplos e missoes praticas.
-    </p>
-    """, unsafe_allow_html=True)
-
-    # ── Progresso geral ──────────────────────────────────────────────────────
-    prog_pct = int(len(missoes) / 5 * 100)
-    badges = {
-        "missao_pld":      ("🌊", "Observador do PLD"),
-        "missao_contrato": ("📋", "Primeiro Contrato"),
-        "missao_pnl":      ("💰", "Analista de PnL"),
-        "missao_avancado": ("⚖️", "Trader Equilibrado"),
-        "missao_final":    ("🏆", "Sobrevivente da Crise"),
-    }
-
-    st.markdown(f"""
-    <div style='background:#111827; border:1px solid #1e293b; border-radius:8px;
-                padding:1.25rem 1.5rem; margin-bottom:1.5rem;'>
-        <div style='display:flex; justify-content:space-between; align-items:center;
-                    margin-bottom:0.6rem;'>
-            <span style='font-family:JetBrains Mono,monospace; font-size:0.75rem;
-                         color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em;'>
-                Progresso Geral
-            </span>
-            <span style='font-family:JetBrains Mono,monospace; font-size:0.85rem;
-                         font-weight:700; color:#00d4aa;'>{prog_pct}%</span>
-        </div>
-        <div style='background:#1e293b; border-radius:4px; height:6px; margin-bottom:1rem;'>
-            <div style='background:linear-gradient(90deg,#00d4aa,#60a5fa);
-                        width:{prog_pct}%; height:6px; border-radius:4px;
-                        transition: width 0.5s;'></div>
-        </div>
-        <div style='display:flex; gap:0.75rem; flex-wrap:wrap;'>
-    """, unsafe_allow_html=True)
-
-    for mid, (icon, nome) in badges.items():
-        conquistado = mid in missoes
-        st.markdown(f"""
-        <div style='padding:0.4rem 0.75rem; border-radius:20px; font-size:0.75rem;
-                    font-family:JetBrains Mono,monospace;
-                    background:{"rgba(0,212,170,0.1)" if conquistado else "#1e293b"};
-                    border:1px solid {"rgba(0,212,170,0.4)" if conquistado else "#334155"};
-                    color:{"#00d4aa" if conquistado else "#475569"};'>
-            {icon} {nome}
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("</div></div>", unsafe_allow_html=True)
-
-    # ── Navegação entre módulos ──────────────────────────────────────────────
-    tabs_labels = [f"{e['icone']} Módulo {i+1}" for i, e in enumerate(ETAPAS)]
-    tabs = st.tabs(tabs_labels)
-
-    for i, (tab, etapa_info) in enumerate(zip(tabs, ETAPAS)):
-        with tab:
-            cor = etapa_info['cor']
-
-            # Header do módulo
-            st.markdown(f"""
-            <div style='border-left:4px solid {cor}; padding:0.5rem 0 0.5rem 1rem;
-                        margin-bottom:1rem;'>
-                <div style='font-family:Syne,sans-serif; font-size:1.4rem; font-weight:800;
-                            color:{cor};'>{etapa_info["icone"]} {etapa_info["titulo"]}</div>
-                <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem;
-                            color:#475569; text-transform:uppercase; letter-spacing:0.1em;
-                            margin-top:2px;'>Módulo {i+1} de {len(ETAPAS)}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Conteúdo teórico
-            st.markdown(etapa_info["conteudo"])
-
-            # Missão prática
-            if etapa_info["missao"]:
-                missao = etapa_info["missao"]
-                mid    = missao["id"]
-                concluida = mid in missoes
-
-                # Verifica automaticamente se missão foi cumprida
-                auto_verificar = False
-                if mid == "missao_pld":
-                    auto_verificar = len(st.session_state['pld_historico']) > 26
-                elif mid in ("missao_contrato", "missao_pnl", "missao_final"):
-                    auto_verificar = len(st.session_state['contratos']) > 0
-                elif mid == "missao_avancado":
-                    tipos = [c['tipo'] for c in st.session_state['contratos']]
-                    auto_verificar = 'Compra' in tipos and 'Venda' in tipos
-
-                if auto_verificar and not concluida:
-                    st.session_state['missoes_concluidas'].add(mid)
-                    concluida = True
-
-                status_cor  = "#00d4aa" if concluida else cor
-                status_icon = "✅" if concluida else "🎯"
-                status_txt  = "CONCLUÍDA" if concluida else "PENDENTE"
-
-                st.markdown(f"""
-                <div style='background:{"rgba(0,212,170,0.05)" if concluida else "rgba(0,0,0,0)"};
-                            border:1px solid {"rgba(0,212,170,0.3)" if concluida else "#1e293b"};
-                            border-radius:8px; padding:1.25rem 1.5rem; margin:1.5rem 0;'>
-                    <div style='display:flex; justify-content:space-between; align-items:center;
-                                margin-bottom:0.75rem;'>
-                        <div style='font-family:Syne,sans-serif; font-weight:700; font-size:0.95rem;
-                                    color:{status_cor};'>{status_icon} {missao["titulo"]}</div>
-                        <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem;
-                                    color:{status_cor}; background:{"rgba(0,212,170,0.1)" if concluida else "#1e293b"};
-                                    padding:2px 8px; border-radius:3px; letter-spacing:0.1em;'>
-                            {status_txt}
-                        </div>
-                    </div>
-                    <div style='font-size:0.875rem; color:#94a3b8; line-height:1.6;
-                                margin-bottom:0.75rem;'>{missao["descricao"]}</div>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:0.75rem;
-                                color:#475569;'>💡 Dica: {missao["dica"]}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                if not concluida:
-                    col_m1, col_m2 = st.columns([1, 3])
-                    with col_m1:
-                        if st.button(f"✓ Marcar como concluída", key=f"marca_{mid}"):
-                            st.session_state['missoes_concluidas'].add(mid)
-                            st.rerun()
-
-            # Quiz
-            if etapa_info["quiz"]:
-                quiz = etapa_info["quiz"]
-                qkey = f"quiz_{i}"
-                respondida = qkey in st.session_state['quiz_respostas']
-
-                st.markdown(f"""
-                <div style='background:#0d1117; border:1px solid #1e293b; border-radius:8px;
-                            padding:1.25rem 1.5rem; margin-top:1.5rem;'>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem;
-                                color:#475569; text-transform:uppercase; letter-spacing:0.1em;
-                                margin-bottom:0.75rem;'>📝 Quiz de Fixação</div>
-                    <div style='font-family:Syne,sans-serif; font-size:0.95rem; color:#e2e8f0;
-                                margin-bottom:0.75rem;'>{quiz["pergunta"]}</div>
-                """, unsafe_allow_html=True)
-
-                if not respondida:
-                    resposta = st.radio(
-                        "Escolha sua resposta:",
-                        quiz["opcoes"],
-                        key=f"radio_{i}",
-                        label_visibility="collapsed"
-                    )
-                    if st.button("Confirmar resposta", key=f"confirma_{i}"):
-                        idx = quiz["opcoes"].index(resposta)
-                        st.session_state['quiz_respostas'][qkey] = idx
-                        st.rerun()
-                else:
-                    resp_idx = st.session_state['quiz_respostas'][qkey]
-                    correta  = quiz["correta"]
-                    acertou  = resp_idx == correta
-
-                    for j, opcao in enumerate(quiz["opcoes"]):
-                        if j == correta:
-                            icon_o = "✅"
-                            cor_o  = "#00d4aa"
-                        elif j == resp_idx and not acertou:
-                            icon_o = "❌"
-                            cor_o  = "#fb7185"
-                        else:
-                            icon_o = "○"
-                            cor_o  = "#334155"
-                        st.markdown(f"""
-                        <div style='font-family:JetBrains Mono,monospace; font-size:0.82rem;
-                                    color:{cor_o}; padding:4px 0;'>{icon_o} {opcao}</div>
-                        """, unsafe_allow_html=True)
-
-                    resultado_txt = "✅ Correto!" if acertou else "❌ Não foi dessa vez."
-                    resultado_cor = "#00d4aa" if acertou else "#fb7185"
-                    st.markdown(f"""
-                    <div style='margin-top:0.75rem; padding:0.75rem 1rem;
-                                background:{"rgba(0,212,170,0.05)" if acertou else "rgba(251,113,133,0.05)"};
-                                border-left:3px solid {resultado_cor}; border-radius:0 6px 6px 0;
-                                font-size:0.85rem; color:#94a3b8;'>
-                        <b style='color:{resultado_cor};'>{resultado_txt}</b><br>
-                        {quiz["explicacao"]}
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    if st.button("Tentar novamente", key=f"retry_{i}"):
-                        del st.session_state['quiz_respostas'][qkey]
-                        st.rerun()
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── Certificado ──────────────────────────────────────────────────────────
-    if len(missoes) >= 5:
-        st.markdown("---")
-        quizzes_corretos = sum(
-            1 for k, v in st.session_state['quiz_respostas'].items()
-            if v == ETAPAS[int(k.split('_')[1])]['quiz']['correta']
-            if ETAPAS[int(k.split('_')[1])]['quiz'] is not None
-        )
-        st.markdown(f"""
-        <div style='background:linear-gradient(135deg,rgba(0,212,170,0.08),rgba(96,165,250,0.08));
-                    border:1px solid rgba(0,212,170,0.3); border-radius:12px;
-                    padding:2rem; text-align:center; margin-top:1rem;'>
-            <div style='font-size:3rem; margin-bottom:0.5rem;'>🏆</div>
-            <div style='font-family:Syne,sans-serif; font-size:1.6rem; font-weight:800;
-                        background:linear-gradient(90deg,#00d4aa,#60a5fa);
-                        -webkit-background-clip:text; -webkit-text-fill-color:transparent;'>
-                Tutorial Concluído!
-            </div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.85rem;
-                        color:#64748b; margin-top:0.5rem;'>
-                Você completou todas as 5 missões e demonstrou conhecimento no mercado livre de energia.
-            </div>
-            <div style='display:flex; justify-content:center; gap:2rem; margin-top:1.25rem;'>
-                <div>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:1.8rem;
-                                font-weight:700; color:#00d4aa;'>5/5</div>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem;
-                                color:#475569; text-transform:uppercase;'>Missões</div>
-                </div>
-                <div>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:1.8rem;
-                                font-weight:700; color:#60a5fa;'>{quizzes_corretos}/4</div>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem;
-                                color:#475569; text-transform:uppercase;'>Quizzes certos</div>
-                </div>
-            </div>
-            <div style='margin-top:1.25rem; font-family:JetBrains Mono,monospace;
-                        font-size:0.8rem; color:#475569;'>
-                Agora explore o simulador livremente — registre contratos, atualize o PLD e treine suas estratégias!
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-# ════════════════════════════════════════════════════════════════════════════════
 # PAINEL DE MERCADO
 # ════════════════════════════════════════════════════════════════════════════════
 if pagina == 'mercado':
@@ -913,10 +567,18 @@ if pagina == 'mercado':
     st.markdown("<p style='color:#475569; font-size:0.85rem; margin-top:-0.5rem;'>Visão geral do mercado livre de energia elétrica</p>", unsafe_allow_html=True)
     st.markdown("---")
 
-    pld = st.session_state['pld_atual']
+    pld     = st.session_state['pld_atual']
     df_hist = st.session_state['pld_historico']
-    var_pld  = pld - df_hist['PLD (R$/MWh)'].iloc[-2] if len(df_hist) > 1 else 0
+    var_pld = pld - df_hist['PLD (R$/MWh)'].iloc[-2] if len(df_hist) > 1 else 0
 
+    # Alertas meteo no topo do painel
+    fator_meteo, alertas = _impacto_meteo_no_pld(st.session_state['meteo'])
+    if alertas:
+        for icone, tipo, msg in alertas[:3]:  # máximo 3 alertas no painel
+            box_class = "danger-box" if tipo == "danger" else "warn-box" if tipo == "warn" else "info-box"
+            st.markdown(f"<div class='{box_class}'>{icone} {msg}</div>", unsafe_allow_html=True)
+
+    st.markdown("")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("PLD SE/CO", f"R$ {pld:.2f}", f"{var_pld:+.2f} R$/MWh")
     c2.metric("PLD Sul",   f"R$ {pld * SUBM['S']:.2f}",  "−5% SE/CO")
@@ -956,10 +618,10 @@ if pagina == 'mercado':
                         margin-bottom: 0.75rem;'>Estatísticas (24m)</div>
         """, unsafe_allow_html=True)
         stats = {
-            "Mínimo":  df_hist['PLD (R$/MWh)'].min(),
-            "Máximo":  df_hist['PLD (R$/MWh)'].max(),
-            "Média":   df_hist['PLD (R$/MWh)'].mean(),
-            "Desvio":  df_hist['PLD (R$/MWh)'].std(),
+            "Mínimo": df_hist['PLD (R$/MWh)'].min(),
+            "Máximo": df_hist['PLD (R$/MWh)'].max(),
+            "Média":  df_hist['PLD (R$/MWh)'].mean(),
+            "Desvio": df_hist['PLD (R$/MWh)'].std(),
         }
         for k, v in stats.items():
             st.markdown(f"""
@@ -970,49 +632,16 @@ if pagina == 'mercado':
                 <span style='color:#e2e8f0;'>R$ {v:.2f}</span>
             </div>
             """, unsafe_allow_html=True)
+        # Fator meteorológico resumido
+        cor_fator = "#00d4aa" if fator_meteo <= 1.0 else "#fbbf24" if fator_meteo <= 1.2 else "#fb7185"
+        st.markdown(f"""
+        <div style='display:flex; justify-content:space-between; padding: 6px 0 0 0;
+                    font-family: JetBrains Mono, monospace; font-size: 0.8rem;'>
+            <span style='color:#64748b;'>Pressão Meteo</span>
+            <span style='color:{cor_fator}; font-weight:700;'>{fator_meteo:.2f}×</span>
+        </div>
+        """, unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown("#### 💡 Como funciona o Mercado Livre de Energia?")
-
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        st.markdown("""
-        <div class='card'>
-            <div style='font-size:1.5rem; margin-bottom:0.5rem;'>🏭</div>
-            <div style='font-weight:700; color:#e2e8f0; margin-bottom:0.4rem;'>Agentes</div>
-            <div style='font-size:0.82rem; color:#64748b; line-height:1.6;'>
-                <b style='color:#94a3b8;'>Geradores</b> produzem energia e a vendem.
-                <b style='color:#94a3b8;'>Comercializadores</b> compram e revendem.
-                <b style='color:#94a3b8;'>Consumidores Livres</b> negociam diretamente
-                (acima de 500 kW).
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_b:
-        st.markdown("""
-        <div class='card'>
-            <div style='font-size:1.5rem; margin-bottom:0.5rem;'>📈</div>
-            <div style='font-weight:700; color:#e2e8f0; margin-bottom:0.4rem;'>PLD</div>
-            <div style='font-size:0.82rem; color:#64748b; line-height:1.6;'>
-                O <b style='color:#94a3b8;'>Preço de Liquidação das Diferenças</b> é calculado
-                semanalmente pela CCEE. Serve como referência para liquidar contratos e
-                reflete o custo marginal de operação do sistema.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_c:
-        st.markdown("""
-        <div class='card'>
-            <div style='font-size:1.5rem; margin-bottom:0.5rem;'>⚖️</div>
-            <div style='font-weight:700; color:#e2e8f0; margin-bottom:0.4rem;'>Contrato vs Spot</div>
-            <div style='font-size:0.82rem; color:#64748b; line-height:1.6;'>
-                Você pode travar um <b style='color:#94a3b8;'>preço fixo</b> por contrato bilateral,
-                ou ficar exposto ao <b style='color:#94a3b8;'>PLD (spot)</b>.
-                A diferença entre os dois gera o PnL do trader.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("#### 🔢 Calculadora Rápida de Exposição")
@@ -1025,8 +654,8 @@ if pagina == 'mercado':
     with cc3:
         horas_calc = st.number_input("Horas do período", min_value=1, value=720, step=24)
 
-    vol_total   = vol_calc * horas_calc
-    exposicao   = (pld - preco_calc) * vol_total
+    vol_total = vol_calc * horas_calc
+    exposicao = (pld - preco_calc) * vol_total
     st.markdown(f"""
     <div style='display:flex; gap:1rem; margin-top:0.5rem;'>
         <div class='card' style='flex:1;'>
@@ -1052,6 +681,313 @@ if pagina == 'mercado':
 
 
 # ════════════════════════════════════════════════════════════════════════════════
+# PAINEL DE METEOROLOGIA
+# ════════════════════════════════════════════════════════════════════════════════
+elif pagina == 'meteo':
+
+    st.markdown("# 🌦️ Meteorologia & Hidrologia")
+    st.markdown("<p style='color:#475569; font-size:0.85rem; margin-top:-0.5rem;'>Condições climáticas e hidrológicas que impactam o PLD</p>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    meteo = st.session_state['meteo']
+    datas_str = meteo['datas']
+
+    fator_meteo, alertas = _impacto_meteo_no_pld(meteo)
+
+    # ── Alertas ──────────────────────────────────────────────────────────────
+    if alertas:
+        st.markdown("#### 🔔 Alertas do Sistema")
+        for icone, tipo, msg in alertas:
+            box_class = "danger-box" if tipo == "danger" else "warn-box" if tipo == "warn" else "info-box"
+            st.markdown(f"<div class='{box_class}'>{icone} {msg}</div>", unsafe_allow_html=True)
+        st.markdown("")
+
+    # ── Métricas atuais ───────────────────────────────────────────────────────
+    st.markdown("#### 📡 Condições Atuais")
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+
+    res_atual  = meteo['reserv'][-1]
+    aflu_atual = meteo['afluen'][-1]
+    prec_atual = meteo['precip'][-1]
+    temp_atual = meteo['temp'][-1]
+    eol_atual  = meteo['eolica'][-1]
+    sol_atual  = meteo['solar'][-1]
+
+    res_prev   = meteo['reserv'][-2]  if len(meteo['reserv'])  > 1 else res_atual
+    aflu_prev  = meteo['afluen'][-2]  if len(meteo['afluen'])  > 1 else aflu_atual
+    eol_prev   = meteo['eolica'][-2]  if len(meteo['eolica'])  > 1 else eol_atual
+
+    m1.metric("Reservatório SE/CO", f"{res_atual:.0f}%",  f"{res_atual - res_prev:+.1f}%")
+    m2.metric("Afluência (% MLT)",  f"{aflu_atual:.0f}%", f"{aflu_atual - aflu_prev:+.1f}%")
+    m3.metric("Precipitação",       f"{prec_atual:.0f} mm")
+    m4.metric("Temperatura SE/CO",  f"{temp_atual:.1f}°C")
+    m5.metric("Geração Eólica NE",  f"{eol_atual:.0f}%",  f"{eol_atual - eol_prev:+.1f}%")
+    m6.metric("Geração Solar",      f"{sol_atual:.0f}%")
+
+    # Fator de pressão no PLD
+    cor_fator = "#00d4aa" if fator_meteo <= 1.0 else "#fbbf24" if fator_meteo <= 1.2 else "#fb7185"
+    label_fator = "Baixa pressão" if fator_meteo <= 1.0 else "Pressão moderada" if fator_meteo <= 1.2 else "Alta pressão"
+    st.markdown(f"""
+    <div style='background:#111827; border:1px solid #1e293b; border-radius:8px;
+                padding:1rem 1.5rem; margin-top:1rem; display:flex;
+                justify-content:space-between; align-items:center;'>
+        <div>
+            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem;
+                        color:#475569; text-transform:uppercase; letter-spacing:0.1em;'>
+                Fator de Pressão Meteorológica sobre o PLD
+            </div>
+            <div style='font-family:JetBrains Mono,monospace; font-size:0.82rem;
+                        color:#94a3b8; margin-top:2px;'>
+                Reflete o impacto combinado das condições climáticas na tendência do PLD
+            </div>
+        </div>
+        <div style='text-align:right;'>
+            <div style='font-family:JetBrains Mono,monospace; font-size:2rem;
+                        font-weight:700; color:{cor_fator};'>{fator_meteo:.2f}×</div>
+            <div style='font-family:JetBrains Mono,monospace; font-size:0.7rem;
+                        color:{cor_fator};'>{label_fator}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Gráficos históricos ───────────────────────────────────────────────────
+    st.markdown("#### 📈 Histórico (24 meses)")
+
+    tab1, tab2, tab3 = st.tabs(["💧 Hidrologia", "🌡️ Clima", "⚡ Renováveis"])
+
+    with tab1:
+        fig_hid = go.Figure()
+        fig_hid.add_trace(go.Scatter(
+            x=datas_str, y=meteo['reserv'],
+            mode='lines', name='Reservatório SE/CO (%)',
+            line=dict(color='#60a5fa', width=2),
+            fill='tozeroy', fillcolor='rgba(96,165,250,0.08)',
+            hovertemplate='%{x}<br>Reservatório: %{y:.1f}%<extra></extra>'
+        ))
+        # Linha de atenção em 40%
+        fig_hid.add_hline(y=40, line_color='#fbbf24', line_dash='dash',
+                          annotation_text='Atenção (40%)', annotation_font_color='#fbbf24')
+        fig_hid.add_hline(y=20, line_color='#fb7185', line_dash='dash',
+                          annotation_text='Crítico (20%)', annotation_font_color='#fb7185')
+        fig_hid.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(gridcolor='#1e293b', color='#475569'),
+            yaxis=dict(gridcolor='#1e293b', color='#475569', title='%', range=[0, 105]),
+            margin=dict(l=10, r=10, t=30, b=10), height=260,
+            font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
+            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#94a3b8'))
+        )
+
+        fig_aflu = go.Figure()
+        fig_aflu.add_trace(go.Bar(
+            x=datas_str, y=meteo['afluen'],
+            name='Afluência (% MLT)',
+            marker_color=[
+                '#fb7185' if v < 50 else '#fbbf24' if v < 80 else '#00d4aa'
+                for v in meteo['afluen']
+            ],
+            hovertemplate='%{x}<br>Afluência: %{y:.1f}% MLT<extra></extra>'
+        ))
+        fig_aflu.add_hline(y=100, line_color='#475569', line_dash='dash',
+                           annotation_text='MLT (100%)', annotation_font_color='#475569')
+        fig_aflu.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(gridcolor='#1e293b', color='#475569'),
+            yaxis=dict(gridcolor='#1e293b', color='#475569', title='% MLT'),
+            margin=dict(l=10, r=10, t=30, b=10), height=260,
+            font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
+        )
+
+        col_h1, col_h2 = st.columns(2)
+        with col_h1:
+            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Nível dos Reservatórios</div>", unsafe_allow_html=True)
+            st.plotly_chart(fig_hid, use_container_width=True)
+        with col_h2:
+            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Afluência Natural (% da MLT)</div>", unsafe_allow_html=True)
+            st.plotly_chart(fig_aflu, use_container_width=True)
+
+        st.markdown("""
+        <div class='info-box'>
+            💡 <b>Como interpretar:</b> Reservatório abaixo de 40% e afluência abaixo da MLT (100%)
+            são os principais sinais de alerta para alta do PLD. Em 2021, o reservatório SE/CO
+            caiu abaixo de 15% e o PLD atingiu o teto regulatório.
+        </div>
+        """, unsafe_allow_html=True)
+
+    with tab2:
+        fig_prec = go.Figure()
+        fig_prec.add_trace(go.Bar(
+            x=datas_str, y=meteo['precip'],
+            name='Precipitação (mm)',
+            marker_color='rgba(96,165,250,0.7)',
+            hovertemplate='%{x}<br>Precipitação: %{y:.0f} mm<extra></extra>'
+        ))
+        fig_prec.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(gridcolor='#1e293b', color='#475569'),
+            yaxis=dict(gridcolor='#1e293b', color='#475569', title='mm/mês'),
+            margin=dict(l=10, r=10, t=30, b=10), height=260,
+            font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
+        )
+
+        fig_temp = go.Figure()
+        fig_temp.add_trace(go.Scatter(
+            x=datas_str, y=meteo['temp'],
+            mode='lines+markers',
+            line=dict(color='#f59e0b', width=2),
+            marker=dict(size=4, color='#f59e0b'),
+            hovertemplate='%{x}<br>Temperatura: %{y:.1f}°C<extra></extra>'
+        ))
+        fig_temp.add_hline(y=30, line_color='#fb7185', line_dash='dash',
+                           annotation_text='Calor extremo (30°C)', annotation_font_color='#fb7185')
+        fig_temp.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(gridcolor='#1e293b', color='#475569'),
+            yaxis=dict(gridcolor='#1e293b', color='#475569', title='°C'),
+            margin=dict(l=10, r=10, t=30, b=10), height=260,
+            font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
+        )
+
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Precipitação SE/CO</div>", unsafe_allow_html=True)
+            st.plotly_chart(fig_prec, use_container_width=True)
+        with col_c2:
+            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Temperatura Média SE/CO</div>", unsafe_allow_html=True)
+            st.plotly_chart(fig_temp, use_container_width=True)
+
+        st.markdown("""
+        <div class='info-box'>
+            💡 <b>Como interpretar:</b> Precipitação baixa por vários meses consecutivos é sinal
+            de risco hídrico. Temperaturas acima de 30°C aumentam a demanda de climatização,
+            pressionando o PLD para cima.
+        </div>
+        """, unsafe_allow_html=True)
+
+    with tab3:
+        fig_eol = go.Figure()
+        fig_eol.add_trace(go.Scatter(
+            x=datas_str, y=meteo['eolica'],
+            mode='lines', name='Eólica NE (%)',
+            line=dict(color='#a78bfa', width=2),
+            fill='tozeroy', fillcolor='rgba(167,139,250,0.08)',
+            hovertemplate='%{x}<br>Eólica: %{y:.1f}%<extra></extra>'
+        ))
+        fig_eol.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(gridcolor='#1e293b', color='#475569'),
+            yaxis=dict(gridcolor='#1e293b', color='#475569', title='% capacidade', range=[0, 105]),
+            margin=dict(l=10, r=10, t=30, b=10), height=260,
+            font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
+        )
+
+        fig_sol = go.Figure()
+        fig_sol.add_trace(go.Scatter(
+            x=datas_str, y=meteo['solar'],
+            mode='lines', name='Solar (%)',
+            line=dict(color='#f59e0b', width=2),
+            fill='tozeroy', fillcolor='rgba(245,158,11,0.08)',
+            hovertemplate='%{x}<br>Solar: %{y:.1f}%<extra></extra>'
+        ))
+        fig_sol.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(gridcolor='#1e293b', color='#475569'),
+            yaxis=dict(gridcolor='#1e293b', color='#475569', title='% capacidade', range=[0, 105]),
+            margin=dict(l=10, r=10, t=30, b=10), height=260,
+            font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
+        )
+
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Fator de Capacidade Eólica (NE)</div>", unsafe_allow_html=True)
+            st.plotly_chart(fig_eol, use_container_width=True)
+        with col_r2:
+            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Fator de Capacidade Solar</div>", unsafe_allow_html=True)
+            st.plotly_chart(fig_sol, use_container_width=True)
+
+        st.markdown("""
+        <div class='info-box'>
+            💡 <b>Como interpretar:</b> Alta geração eólica e solar reduz a necessidade de
+            despacho termelétrico, aliviando o CMO e pressionando o PLD para baixo.
+            O Nordeste concentra ~90% da capacidade eólica instalada do Brasil.
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Tabela de correlações ─────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### 🔗 Matriz de Impacto no PLD")
+
+    st.markdown("""
+    <div style='overflow-x:auto;'>
+    <table style='width:100%; border-collapse:collapse; font-family:JetBrains Mono,monospace; font-size:0.8rem;'>
+      <thead>
+        <tr style='background:#111827; color:#64748b; text-transform:uppercase; font-size:0.65rem; letter-spacing:0.05em;'>
+          <th style='padding:8px 12px; text-align:left; border-bottom:1px solid #1e293b;'>Variável</th>
+          <th style='padding:8px 12px; text-align:center; border-bottom:1px solid #1e293b;'>Quando SOBE</th>
+          <th style='padding:8px 12px; text-align:center; border-bottom:1px solid #1e293b;'>Impacto no PLD</th>
+          <th style='padding:8px 12px; text-align:center; border-bottom:1px solid #1e293b;'>Quando CAI</th>
+          <th style='padding:8px 12px; text-align:center; border-bottom:1px solid #1e293b;'>Impacto no PLD</th>
+          <th style='padding:8px 12px; text-align:left; border-bottom:1px solid #1e293b;'>Intensidade</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style='border-bottom:1px solid #1e293b;'>
+          <td style='padding:8px 12px; color:#e2e8f0;'>💧 Reservatório</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Nível sobe</td>
+          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Nível cai</td>
+          <td style='padding:8px 12px; text-align:center; color:#fb7185; font-weight:700;'>↑ Sobe forte</td>
+          <td style='padding:8px 12px; color:#f59e0b;'>★★★★★ Crítica</td>
+        </tr>
+        <tr style='border-bottom:1px solid #1e293b; background:rgba(255,255,255,0.01);'>
+          <td style='padding:8px 12px; color:#e2e8f0;'>🌧️ Afluência</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Acima MLT</td>
+          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Abaixo MLT</td>
+          <td style='padding:8px 12px; text-align:center; color:#fb7185; font-weight:700;'>↑ Sobe forte</td>
+          <td style='padding:8px 12px; color:#f59e0b;'>★★★★★ Crítica</td>
+        </tr>
+        <tr style='border-bottom:1px solid #1e293b;'>
+          <td style='padding:8px 12px; color:#e2e8f0;'>🌡️ Temperatura</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Onda de calor</td>
+          <td style='padding:8px 12px; text-align:center; color:#fb7185; font-weight:700;'>↑ Sobe</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Temperatura amena</td>
+          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Leve baixa</td>
+          <td style='padding:8px 12px; color:#94a3b8;'>★★★☆☆ Moderada</td>
+        </tr>
+        <tr style='border-bottom:1px solid #1e293b; background:rgba(255,255,255,0.01);'>
+          <td style='padding:8px 12px; color:#e2e8f0;'>💨 Eólica NE</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Vento forte</td>
+          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Vento fraco</td>
+          <td style='padding:8px 12px; text-align:center; color:#fbbf24; font-weight:700;'>↑ Leve alta</td>
+          <td style='padding:8px 12px; color:#94a3b8;'>★★★☆☆ Moderada</td>
+        </tr>
+        <tr style='border-bottom:1px solid #1e293b;'>
+          <td style='padding:8px 12px; color:#e2e8f0;'>☀️ Solar</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Alta irradiação</td>
+          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa leve</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Dias nublados</td>
+          <td style='padding:8px 12px; text-align:center; color:#fbbf24; font-weight:700;'>↑ Leve alta</td>
+          <td style='padding:8px 12px; color:#94a3b8;'>★★☆☆☆ Baixa</td>
+        </tr>
+        <tr>
+          <td style='padding:8px 12px; color:#e2e8f0;'>🌧️ Precipitação</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Chuvas fortes</td>
+          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa (futuro)</td>
+          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Seca prolongada</td>
+          <td style='padding:8px 12px; text-align:center; color:#fb7185; font-weight:700;'>↑ Sobe (futuro)</td>
+          <td style='padding:8px 12px; color:#fbbf24;'>★★★★☆ Alta</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
 # NOVO CONTRATO
 # ════════════════════════════════════════════════════════════════════════════════
 elif pagina == 'novo_contrato':
@@ -1068,13 +1004,30 @@ elif pagina == 'novo_contrato':
     </div>
     """, unsafe_allow_html=True)
 
+    # Alerta meteo no formulário
+    fator_meteo, alertas = _impacto_meteo_no_pld(st.session_state['meteo'])
+    if fator_meteo > 1.15:
+        st.markdown(f"""
+        <div class='warn-box'>
+            ⚠️ <b>Atenção:</b> As condições meteorológicas atuais indicam pressão de alta no PLD
+            (fator {fator_meteo:.2f}×). Considere o impacto ao definir o preço do contrato.
+        </div>
+        """, unsafe_allow_html=True)
+    elif fator_meteo < 0.95:
+        st.markdown(f"""
+        <div class='info-box'>
+            ✅ <b>Condições favoráveis:</b> Fatores climáticos sugerem pressão de baixa no PLD
+            (fator {fator_meteo:.2f}×). Bom momento para analisar contratos de venda.
+        </div>
+        """, unsafe_allow_html=True)
+
     with st.form("form_contrato"):
         st.markdown("#### Identificação")
         col1, col2 = st.columns(2)
         with col1:
             nome_contrato = st.text_input("Nome / Referência do Contrato", placeholder="ex: CONTRATO-001")
         with col2:
-            contraparte   = st.text_input("Contraparte", placeholder="ex: Geradora Solar ABC")
+            contraparte = st.text_input("Contraparte", placeholder="ex: Geradora Solar ABC")
 
         st.markdown("#### Operação")
         col3, col4, col5 = st.columns(3)
@@ -1110,7 +1063,6 @@ elif pagina == 'novo_contrato':
             flag_pc = st.checkbox("Marcar flag P/C na boleta", value=False)
 
         obs = st.text_area("Observações", placeholder="Notas adicionais sobre o contrato...", height=80)
-
         submitted = st.form_submit_button("✅  REGISTRAR CONTRATO", type="primary", use_container_width=True)
 
     if submitted:
@@ -1145,6 +1097,7 @@ elif pagina == 'novo_contrato':
             }
             _recalc_pnl(novo)
             st.session_state['contratos'].append(novo)
+            salvar_estado()
 
             vol_total_mwh = volume_mw * horas
             receita_bruta = preco_adj * vol_total_mwh
@@ -1191,8 +1144,7 @@ elif pagina == 'portfolio':
         </div>
         """, unsafe_allow_html=True)
     else:
-        contratos = st.session_state['contratos']
-
+        contratos  = st.session_state['contratos']
         pos_compra = sum(c['volume_mw'] for c in contratos if c['tipo'] == 'Compra')
         pos_venda  = sum(c['volume_mw'] for c in contratos if c['tipo'] == 'Venda')
         pos_liq    = pos_compra - pos_venda
@@ -1256,6 +1208,7 @@ elif pagina == 'portfolio':
 
                 if st.button(f"🗑️ Remover contrato #{c['id']}", key=f"del_{c['id']}"):
                     st.session_state['contratos'] = [x for x in st.session_state['contratos'] if x['id'] != c['id']]
+                    salvar_estado()
                     st.rerun()
 
 
@@ -1274,23 +1227,20 @@ elif pagina == 'pnl':
         contratos = st.session_state['contratos']
         pld       = st.session_state['pld_atual']
 
-        pnl_total    = sum(c['pnl_atual'] for c in contratos)
-        pnl_compras  = sum(c['pnl_atual'] for c in contratos if c['tipo'] == 'Compra')
-        pnl_vendas   = sum(c['pnl_atual'] for c in contratos if c['tipo'] == 'Venda')
-        vol_total    = sum(c['volume_mw'] * c['horas'] for c in contratos)
-        receita_tot  = sum(c['preco'] * c['volume_mw'] * c['horas'] for c in contratos)
+        pnl_total   = sum(c['pnl_atual'] for c in contratos)
+        pnl_compras = sum(c['pnl_atual'] for c in contratos if c['tipo'] == 'Compra')
+        pnl_vendas  = sum(c['pnl_atual'] for c in contratos if c['tipo'] == 'Venda')
 
         m1, m2, m3 = st.columns(3)
-        m1.metric("PnL Total",        _fmt_brl(pnl_total),   delta=f"{'▲' if pnl_total>=0 else '▼'} vs PLD R${pld:.2f}")
-        m2.metric("PnL Compras",      _fmt_brl(pnl_compras))
-        m3.metric("PnL Vendas",       _fmt_brl(pnl_vendas))
+        m1.metric("PnL Total",   _fmt_brl(pnl_total),   delta=f"{'▲' if pnl_total>=0 else '▼'} vs PLD R${pld:.2f}")
+        m2.metric("PnL Compras", _fmt_brl(pnl_compras))
+        m3.metric("PnL Vendas",  _fmt_brl(pnl_vendas))
 
         st.markdown("")
 
-        # Gráfico de barras por contrato
-        nomes  = [c['nome'] for c in contratos]
-        pnls   = [c['pnl_atual'] for c in contratos]
-        cores  = ['#00d4aa' if v >= 0 else '#fb7185' for v in pnls]
+        nomes = [c['nome'] for c in contratos]
+        pnls  = [c['pnl_atual'] for c in contratos]
+        cores = ['#00d4aa' if v >= 0 else '#fb7185' for v in pnls]
 
         fig_bar = go.Figure(go.Bar(
             x=nomes, y=pnls,
@@ -1312,7 +1262,6 @@ elif pagina == 'pnl':
                           line=dict(color='#475569', width=1, dash='dash'))
         st.plotly_chart(fig_bar, use_container_width=True)
 
-        # Simulador de cenário
         st.markdown("---")
         st.markdown("#### 🔮 Simulador de Cenário")
         st.markdown("""
@@ -1339,13 +1288,12 @@ elif pagina == 'pnl':
         delta_cenario = pnl_sim_total - pnl_total
 
         sc1, sc2, sc3 = st.columns(3)
-        sc1.metric("PLD Hipotético",   f"R$ {pld_sim:.2f}/MWh", f"{pld_sim - pld:+.2f} vs atual")
-        sc2.metric("PnL no Cenário",   _fmt_brl(pnl_sim_total))
+        sc1.metric("PLD Hipotético",    f"R$ {pld_sim:.2f}/MWh", f"{pld_sim - pld:+.2f} vs atual")
+        sc2.metric("PnL no Cenário",    _fmt_brl(pnl_sim_total))
         sc3.metric("Variação vs Atual", _fmt_brl(delta_cenario),  delta=f"{delta_cenario:+.2f}")
 
-        # Curva de sensibilidade
-        pld_range  = np.linspace(30, 500, 200)
-        pnl_range  = []
+        pld_range = np.linspace(30, 500, 200)
+        pnl_range = []
         for p in pld_range:
             total_s = 0
             for c in contratos:
@@ -1378,18 +1326,17 @@ elif pagina == 'pnl':
         )
         st.plotly_chart(fig_sens, use_container_width=True)
 
-        # Tabela resumo
         st.markdown("---")
         st.markdown("#### 📊 Tabela Resumo")
         rows = []
         for c, pnl_s in zip(contratos, pnl_sim_list):
             rows.append({
-                'Contrato':      c['nome'],
-                'Tipo':          c['tipo'],
-                'Submercado':    c['submercado'],
-                'Preço (R$/MWh)': f"{c['preco']:.2f}",
-                'Volume (MW)':   c['volume_mw'],
-                'PnL Atual (R$)': c['pnl_atual'],
+                'Contrato':         c['nome'],
+                'Tipo':             c['tipo'],
+                'Submercado':       c['submercado'],
+                'Preço (R$/MWh)':   f"{c['preco']:.2f}",
+                'Volume (MW)':      c['volume_mw'],
+                'PnL Atual (R$)':   c['pnl_atual'],
                 'PnL Cenário (R$)': pnl_s,
             })
         df_res = pd.DataFrame(rows)
@@ -1418,57 +1365,56 @@ elif pagina == 'glossario':
          "Preço calculado semanalmente pela CCEE com base no Custo Marginal de Operação (CMO) do sistema elétrico. "
          "Reflete o custo de se produzir mais uma unidade de energia naquele momento. "
          "É o principal referencial de preço no mercado de curto prazo."),
-
         ("CMO — Custo Marginal de Operação",
          "Custo de se atender a mais uma unidade de demanda no sistema. Em períodos secos, com reservatórios baixos, "
          "o CMO sobe porque é necessário acionar termoelétricas mais caras. Em períodos úmidos, o CMO cai."),
-
         ("ACL — Ambiente de Contratação Livre",
          "Segmento do mercado onde consumidores com demanda acima de 500 kW podem comprar energia livremente "
          "de qualquer gerador ou comercializador, negociando preço, prazo e condições."),
-
         ("ACR — Ambiente de Contratação Regulada",
          "Segmento onde distribuidoras compram energia em leilões regulados pela ANEEL para atender "
          "consumidores cativos (residências, pequenas empresas etc.)."),
-
         ("Submercado",
          "O Brasil é dividido em 4 submercados: SE/CO (Sudeste/Centro-Oeste), S (Sul), NE (Nordeste) e N (Norte). "
          "Cada um tem seu próprio PLD, que pode diferir dos demais por conta de restrições de transmissão."),
-
+        ("Afluência Natural",
+         "Volume de água que chega naturalmente aos reservatórios das usinas hidrelétricas, expresso em % da MLT "
+         "(Média de Longo Termo). Afluência acima de 100% indica condições hídricas favoráveis."),
+        ("MLT — Média de Longo Termo",
+         "Média histórica das afluências naturais dos reservatórios, calculada com base em séries de 70+ anos. "
+         "É a referência para avaliar se um período hidrológico é seco ou úmido."),
+        ("Reservatório EAR",
+         "Energia Armazenável Real nos reservatórios das hidrelétricas, expressa em % da capacidade total. "
+         "EAR abaixo de 20% configura estado de atenção; abaixo de 10%, estado crítico."),
         ("Posição Comprada (Long)",
          "Quando você comprou mais energia do que vendeu. Você se beneficia quando o PLD sobe acima do seu preço de compra, "
          "pois pode revender no spot com lucro."),
-
         ("Posição Vendida (Short)",
          "Quando você vendeu mais energia do que comprou. Você se beneficia quando o PLD cai abaixo do seu preço de venda."),
-
         ("Gross-up de PIS/COFINS",
          "Ajuste no preço da energia para embutir os impostos PIS/COFINS (alíquota de 9,25%). "
-         "Usado para que o preço líquido após impostos corresponda ao valor acordado. "
          "Fórmula: Preço Gross-up = Preço / (1 − 9,25%)."),
-
         ("Mark to Market (MtM)",
          "Reavaliação dos contratos a preços de mercado correntes (PLD atual). "
          "O PnL MtM mostra quanto você ganharia ou perderia se liquidasse tudo hoje."),
-
         ("Contrato Bilateral",
          "Acordo direto entre duas partes (comprador e vendedor) fora do ambiente de leilão. "
          "Permite flexibilidade total na negociação de preço, prazo, volume e índice de reajuste."),
-
         ("Energia Incentivada",
          "Energia proveniente de fontes renováveis (solar, eólica, PCH, biomassa) que possui desconto "
          "de 50% ou 100% na TUSD/TUST. Consumidores que compram esse tipo de energia podem migrar ao ACL "
          "com demanda a partir de 500 kW (50%) ou 30 kW (100%)."),
-
         ("CCEE — Câmara de Comercialização de Energia Elétrica",
          "Entidade que administra o mercado de curto prazo (spot) no Brasil. "
          "Calcula e publica o PLD, realiza a liquidação financeira das diferenças entre "
          "o contratado e o consumido/gerado."),
-
+        ("Fator de Capacidade",
+         "Relação entre a geração efetiva de uma usina e sua capacidade instalada máxima, em %. "
+         "Para eólica no NE, valores acima de 50% são considerados excelentes. "
+         "Para solar, valores acima de 25% (médio anual) são típicos no Brasil."),
         ("Delta",
          "Variação do PnL para uma variação unitária no PLD. Indica a sensibilidade do portfólio. "
          "Um delta positivo (posição comprada) significa que o portfólio ganha quando o PLD sobe."),
-
         ("Spread",
          "Diferença entre o preço de compra e o preço de venda. "
          "O lucro de um comercializador vem em parte desse spread entre o que paga ao gerador "
