@@ -7,9 +7,10 @@ from dateutil.relativedelta import relativedelta
 import random
 import json
 import os
+import math
 
 st.set_page_config(
-    page_title="Energy Trading Simulator",
+    page_title="EnergyTrader v4",
     page_icon="⚡",
     layout="wide"
 )
@@ -23,204 +24,288 @@ html, body, [class*="css"] {
     background-color: #0a0e1a;
     color: #e2e8f0;
 }
-
 .block-container { padding: 1.5rem 2.5rem; }
-
-h1, h2, h3 {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-}
+h1, h2, h3 { font-family: 'Syne', sans-serif; font-weight: 800; letter-spacing: -0.02em; }
 
 .stButton > button {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    border-radius: 4px;
-    border: 1px solid #334155;
-    background: #1e293b;
-    color: #94a3b8;
-    transition: all 0.2s;
-    text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 600;
+    letter-spacing: 0.08em; border-radius: 4px; border: 1px solid #334155;
+    background: #1e293b; color: #94a3b8; transition: all 0.2s; text-transform: uppercase;
 }
-.stButton > button:hover {
-    border-color: #00d4aa;
-    color: #00d4aa;
-    background: rgba(0, 212, 170, 0.05);
-}
-.stButton > button[kind="primary"] {
-    background: #00d4aa;
-    color: #0a0e1a;
-    border-color: #00d4aa;
-    font-weight: 700;
-}
-.stButton > button[kind="primary"]:hover {
-    background: #00f0c0;
-    border-color: #00f0c0;
-    color: #0a0e1a;
-}
+.stButton > button:hover { border-color: #00d4aa; color: #00d4aa; background: rgba(0,212,170,0.05); }
+.stButton > button[kind="primary"] { background: #00d4aa; color: #0a0e1a; border-color: #00d4aa; font-weight: 700; }
+.stButton > button[kind="primary"]:hover { background: #00f0c0; border-color: #00f0c0; color: #0a0e1a; }
 
-[data-testid="stSidebar"] {
-    background-color: #0d1117 !important;
-    border-right: 1px solid #1e293b;
-}
+[data-testid="stSidebar"] { background-color: #0d1117 !important; border-right: 1px solid #1e293b; }
 [data-testid="stSidebar"] * { color: #94a3b8; }
 
 .stSelectbox > div > div, .stNumberInput > div > div > input,
 .stTextInput > div > div > input, .stDateInput > div > div > input {
-    background-color: #1e293b !important;
-    color: #e2e8f0 !important;
-    border-color: #334155 !important;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
+    background-color: #1e293b !important; color: #e2e8f0 !important;
+    border-color: #334155 !important; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
 }
-
 .stSlider > div > div > div { background-color: #334155; }
 .stSlider > div > div > div > div { background-color: #00d4aa; }
+[data-testid="stMetricValue"] { font-family: 'JetBrains Mono', monospace; font-size: 1.6rem !important; font-weight: 700; color: #e2e8f0; }
+[data-testid="stMetricLabel"] { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: #64748b; }
+[data-testid="stMetricDelta"] { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
 
-[data-testid="stMetricValue"] {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 1.6rem !important;
-    font-weight: 700;
-    color: #e2e8f0;
-}
-[data-testid="stMetricLabel"] {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #64748b;
-}
-[data-testid="stMetricDelta"] {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-}
+.card { background: #111827; border: 1px solid #1e293b; border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+.tag-compra { background: rgba(0,212,170,0.15); color: #00d4aa; border: 1px solid rgba(0,212,170,0.3); padding: 2px 10px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 600; }
+.tag-venda { background: rgba(251,113,133,0.15); color: #fb7185; border: 1px solid rgba(251,113,133,0.3); padding: 2px 10px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 600; }
+.info-box { background: rgba(0,212,170,0.05); border-left: 3px solid #00d4aa; padding: 0.75rem 1rem; border-radius: 0 6px 6px 0; margin: 0.5rem 0; font-size: 0.85rem; color: #94a3b8; }
+.warn-box { background: rgba(251,191,36,0.05); border-left: 3px solid #fbbf24; padding: 0.75rem 1rem; border-radius: 0 6px 6px 0; margin: 0.5rem 0; font-size: 0.85rem; color: #94a3b8; }
+.danger-box { background: rgba(251,113,133,0.05); border-left: 3px solid #fb7185; padding: 0.75rem 1rem; border-radius: 0 6px 6px 0; margin: 0.5rem 0; font-size: 0.85rem; color: #94a3b8; }
+.market-closed-box { background: rgba(100,116,139,0.08); border: 1px solid #334155; border-radius: 8px; padding: 1rem 1.5rem; margin: 0.5rem 0; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #475569; }
 
-div[data-testid="stDataFrame"] {
-    border-radius: 6px;
-    border: 1px solid #1e293b;
-    overflow: hidden;
-}
+.turn-clock { background: linear-gradient(135deg, #111827 0%, #0d1117 100%); border: 1px solid #1e293b; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; text-align: center; }
+.turn-clock .clock-time { font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: 700; color: #00d4aa; letter-spacing: 0.05em; line-height: 1; }
+.turn-clock .clock-date { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #475569; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 4px; }
+.turn-clock .clock-turn { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: #334155; text-transform: uppercase; letter-spacing: 0.12em; margin-top: 6px; border-top: 1px solid #1e293b; padding-top: 6px; }
+.market-status-open { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #00d4aa; font-weight: 700; margin-top: 4px; }
+.market-status-closed { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #475569; margin-top: 4px; }
 
-.card {
-    background: #111827;
-    border: 1px solid #1e293b;
-    border-radius: 8px;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1rem;
-}
-
-.tag-compra {
-    background: rgba(0, 212, 170, 0.15);
-    color: #00d4aa;
-    border: 1px solid rgba(0, 212, 170, 0.3);
-    padding: 2px 10px;
-    border-radius: 3px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-.tag-venda {
-    background: rgba(251, 113, 133, 0.15);
-    color: #fb7185;
-    border: 1px solid rgba(251, 113, 133, 0.3);
-    padding: 2px 10px;
-    border-radius: 3px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
-.info-box {
-    background: rgba(0, 212, 170, 0.05);
-    border-left: 3px solid #00d4aa;
-    padding: 0.75rem 1rem;
-    border-radius: 0 6px 6px 0;
-    margin: 0.5rem 0;
-    font-size: 0.85rem;
-    color: #94a3b8;
-}
-
-.warn-box {
-    background: rgba(251, 191, 36, 0.05);
-    border-left: 3px solid #fbbf24;
-    padding: 0.75rem 1rem;
-    border-radius: 0 6px 6px 0;
-    margin: 0.5rem 0;
-    font-size: 0.85rem;
-    color: #94a3b8;
-}
-
-.danger-box {
-    background: rgba(251, 113, 133, 0.05);
-    border-left: 3px solid #fb7185;
-    padding: 0.75rem 1rem;
-    border-radius: 0 6px 6px 0;
-    margin: 0.5rem 0;
-    font-size: 0.85rem;
-    color: #94a3b8;
-}
-
-/* ── Turn-based clock widget ── */
-.turn-clock {
-    background: linear-gradient(135deg, #111827 0%, #0d1117 100%);
-    border: 1px solid #1e293b;
-    border-radius: 10px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 1rem;
-    text-align: center;
-}
-.turn-clock .clock-time {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 2rem;
-    font-weight: 700;
-    color: #00d4aa;
-    letter-spacing: 0.05em;
-    line-height: 1;
-}
-.turn-clock .clock-date {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    color: #475569;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-top: 4px;
-}
-.turn-clock .clock-turn {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.62rem;
-    color: #334155;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    margin-top: 6px;
-    border-top: 1px solid #1e293b;
-    padding-top: 6px;
-}
-
-/* Turn log */
-.turn-log-item {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    color: #64748b;
-    padding: 3px 0;
-    border-bottom: 1px solid #0d1117;
-}
+.turn-log-item { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #64748b; padding: 3px 0; border-bottom: 1px solid #0d1117; }
 .turn-log-item span.ts { color: #334155; }
 .turn-log-item span.ev { color: #94a3b8; }
 .turn-log-item span.pos { color: #00d4aa; }
 .turn-log-item span.neg { color: #fb7185; }
-
-.mono { font-family: 'JetBrains Mono', monospace; }
+.turn-log-item span.rfq { color: #a78bfa; }
+.turn-log-item span.deal { color: #fbbf24; }
+.rfq-card { background: rgba(167,139,250,0.05); border: 1px solid rgba(167,139,250,0.3); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 0.75rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #a78bfa; }
 hr { border-color: #1e293b; }
 </style>
 """, unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════════════════════════
+# CONSTANTES
+# ════════════════════════════════════════════════════════════════════════════════
+SAVE_FILE          = "energy_trader_save.json"
+HOURS_PER_TURN     = 1
+METEO_UPDATE_HOURS = 24
+PLD_UPDATE_HOURS   = 6        # PLD atualiza a cada 6h de jogo
+MARKET_OPEN_HOUR   = 9
+MARKET_CLOSE_HOUR  = 18
+
+MESES_ABREV = ["JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"]
+MESES_FULL  = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+               "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+
+SUBM  = {"SE/CO": 1.0, "S": 0.95, "NE": 1.05, "N": 1.10}
+TIPOS_ENERGIA = ["Convencional", "Incentivada 50%", "Incentivada 100%"]
+INDICES       = ["Preço Fixo", "PLD Spot", "PLD Médio Mensal", "IPCA + Spread", "IGP-M + Spread"]
+ORDER_TYPES   = ["Limite", "Mercado (Market)", "IOC (Immediate or Cancel)"]
+
+# ── 100+ Contrapartes ──────────────────────────────────────────────────────────
+def _build_counterparties():
+    """Gera lista de 108 contrapartes simuladas com perfis realistas."""
+    cps = []
+
+    # --- Geradores Hidrelétricos (20) ---
+    hidro_nomes = [
+        "Eletrobras Chesf", "Eletrobras Furnas", "Eletrobras Eletronorte", "Cemig GT",
+        "CPFL Geração", "Engie Brasil Hidro", "AES Tietê", "Duke Energy Geração",
+        "EDP Geração Hidro", "Neoenergia Hidro", "Enel Geração Hidro", "Copel GeT",
+        "Cesp Hidro", "Tractebel Hidro", "Brookfield Energia", "PCH Paraíba",
+        "PCH Rio Verde", "PCH Serra Alta", "Hydro BrazGen", "Itaipu Binacional"
+    ]
+    for n in hidro_nomes:
+        cps.append({"nome": n, "tipo": "Vendedora", "produtos_tipo": "longo",
+                    "agressividade": round(random.uniform(0.5, 0.85), 2),
+                    "descricao": "Gerador hidrelétrico — vende agressivamente em períodos úmidos",
+                    "submercados_pref": ["SE/CO","S"], "spread_ref": random.uniform(-0.03, 0.02)})
+
+    # --- Geradores Eólicos (18) ---
+    eolico_nomes = [
+        "Casa dos Ventos", "Voltalia Brasil", "Neoenergia Eólica", "EDP Eólica NE",
+        "Engie Eólica", "CPFL Renováveis Eólica", "Orteng Eólica", "Ômega Energia",
+        "Rio Energy", "Elera Renováveis", "Equatorial Geração Eólica", "Cubico Brasil",
+        "Brasol Eólica", "Venacast Wind", "Enel Green Power NE", "EDPR Brasil",
+        "Vestas Operations", "Siemens Gamesa Energy"
+    ]
+    for n in eolico_nomes:
+        cps.append({"nome": n, "tipo": "Vendedora", "produtos_tipo": "anual",
+                    "agressividade": round(random.uniform(0.45, 0.70), 2),
+                    "descricao": "Gerador eólico — preço baseado em custo de projeto",
+                    "submercados_pref": ["NE","S"], "spread_ref": random.uniform(0.0, 0.04)})
+
+    # --- Geradores Solares (14) ---
+    solar_nomes = [
+        "Atlas Renewable Solar", "Canadian Solar Brazil", "BYD Energy Brasil",
+        "Enel Green Power Solar", "Lightsource bp Brasil", "Elera Solar",
+        "Solaria Brasil", "Grenergy Solar", "Statkraft Solar",
+        "Eneva Solar", "Omega Solar NE", "Serra Solar Geração",
+        "Brasol Solar", "Sungrow Energy Brasil"
+    ]
+    for n in solar_nomes:
+        cps.append({"nome": n, "tipo": "Vendedora", "produtos_tipo": "anual",
+                    "agressividade": round(random.uniform(0.40, 0.65), 2),
+                    "descricao": "Gerador solar — incentivada 100%, PPA de longo prazo",
+                    "submercados_pref": ["NE","SE/CO"], "spread_ref": random.uniform(0.0, 0.05)})
+
+    # --- Geradores Termelétricos (8) ---
+    termo_nomes = [
+        "Eneva Termelétrica", "Celse GNL Sergipe", "Petrobras Termeletrica",
+        "Termomanaus", "TermoNordeste", "UTE Porto do Pecém", "Suape Energética", "GNL Rio"
+    ]
+    for n in termo_nomes:
+        cps.append({"nome": n, "tipo": "Vendedora", "produtos_tipo": "mensal",
+                    "agressividade": round(random.uniform(0.55, 0.80), 2),
+                    "descricao": "Gerador termelétrico — despacho por ordem de mérito",
+                    "submercados_pref": ["SE/CO","NE","N"], "spread_ref": random.uniform(-0.02, 0.03)})
+
+    # --- Comercializadoras (20) ---
+    comer_nomes = [
+        "Comerc Energia", "Atem Energia", "Tradener", "LiquidPower",
+        "Matrix Energia", "Eneva Trading", "Voltalia Trading", "BRL Energy",
+        "BIG Trading", "Plural Energia", "Greener Energia", "GreenYellow Trading",
+        "Axpo Brasil", "Alpiq Brasil", "EDF Trading Brasil", "Shell Energy Brasil",
+        "Trafigura Energy", "Vitol Energy Brasil", "Mercados Energia", "Enertrade"
+    ]
+    for n in comer_nomes:
+        cps.append({"nome": n, "tipo": "Ambos", "produtos_tipo": "todos",
+                    "agressividade": round(random.uniform(0.50, 0.75), 2),
+                    "descricao": "Comercializadora — compra e vende conforme cenário",
+                    "submercados_pref": ["SE/CO","NE","S","N"], "spread_ref": random.uniform(-0.02, 0.02)})
+
+    # --- Consumidores Livres Industriais (20) ---
+    indus_nomes = [
+        "Vale Energia", "Gerdau Aços", "CSN Mineração", "Usiminas Inox",
+        "Votorantim Cimentos", "Suzano Papel", "Fibria Energia", "Klabin Energia",
+        "Braskem Petroquímica", "Petrobras Downstream", "Embraer Facilities",
+        "Natura Cosméticos", "Ambev Cervejaria", "BRF Foods", "JBS Frigorífico",
+        "Marfrig Energia", "Seara Foods", "Perdigão Energia", "Cargill Brasil", "ADM Grains"
+    ]
+    for n in indus_nomes:
+        cps.append({"nome": n, "tipo": "Compradora", "produtos_tipo": "mensal",
+                    "agressividade": round(random.uniform(0.35, 0.65), 2),
+                    "descricao": "Consumidor industrial livre — compra mensalmente",
+                    "submercados_pref": ["SE/CO","S"], "spread_ref": random.uniform(-0.04, 0.0)})
+
+    # --- Distribuidoras (8) ---
+    distrib_nomes = [
+        "Cemig D", "Copel DIS", "CPFL Paulista", "Elektro",
+        "Light Distribuição", "Equatorial Maranhão", "Coelba", "Celpe"
+    ]
+    for n in distrib_nomes:
+        cps.append({"nome": n, "tipo": "Compradora", "produtos_tipo": "mensal",
+                    "agressividade": round(random.uniform(0.60, 0.90), 2),
+                    "descricao": "Distribuidora — alta urgência no fim do mês",
+                    "submercados_pref": ["SE/CO","NE","S"], "spread_ref": random.uniform(-0.02, 0.02)})
+
+    return cps
+
+COUNTERPARTIES = _build_counterparties()
+
+def _cp_produtos(cp: dict, gdt: datetime) -> list:
+    """Retorna produtos válidos para uma contraparte com base no tipo."""
+    produtos_todos = _gerar_produtos(gdt)
+    t = cp.get("produtos_tipo","todos")
+    if t == "mensal":
+        return [p for p in produtos_todos if p["tipo"] == "M"][:4]
+    elif t == "anual":
+        return [p for p in produtos_todos if p["tipo"] == "A"][:3]
+    elif t == "longo":
+        return [p for p in produtos_todos if p["tipo"] in ["Q","A"]][:4]
+    else:  # todos
+        return produtos_todos[:6]
+
+# ════════════════════════════════════════════════════════════════════════════════
+# PRODUTOS DINÂMICOS (nomes dos meses reais)
+# ════════════════════════════════════════════════════════════════════════════════
+def _gerar_produtos(gdt: datetime) -> list:
+    """
+    Gera produtos com nome real dos meses a partir da data do jogo.
+    Inclui mês atual + 11 meses à frente (mensais), 4 trimestres e 2 anos.
+    """
+    produtos = []
+    base = gdt.date().replace(day=1)
+
+    # Meses: atual + próximos 11
+    for i in range(12):
+        dt = base + relativedelta(months=i)
+        codigo = f"{MESES_ABREV[dt.month-1]}/{str(dt.year)[2:]}"
+        label  = f"{MESES_FULL[dt.month-1]} {dt.year}"
+        produtos.append({
+            "codigo": codigo, "label": label, "tipo": "M",
+            "inicio": dt, "fim": (dt + relativedelta(months=1)),
+            "meses": 1, "horas_mes": _horas_mes(dt),
+            "fator_prazo": 1 + (i * 0.004)
+        })
+
+    # Trimestres: Q corrente + Q+1, Q+2, Q+3
+    q_base = _inicio_trimestre(base)
+    for i in range(4):
+        dt_q = q_base + relativedelta(months=3*i)
+        dt_q_fim = dt_q + relativedelta(months=3)
+        mes_q = dt_q.month
+        tri_num = (mes_q - 1) // 3 + 1
+        codigo = f"T{tri_num}/{str(dt_q.year)[2:]}"
+        label  = f"{tri_num}º Trim. {dt_q.year}"
+        horas  = sum(_horas_mes(dt_q + relativedelta(months=k)) for k in range(3))
+        produtos.append({
+            "codigo": codigo, "label": label, "tipo": "Q",
+            "inicio": dt_q, "fim": dt_q_fim,
+            "meses": 3, "horas_mes": horas // 3,
+            "fator_prazo": 1 + (3*i * 0.004)
+        })
+
+    # Anos: ano corrente + próximo
+    for i in range(2):
+        ano = base.year + i
+        dt_a = date(ano, 1, 1)
+        horas = sum(_horas_mes(date(ano, m, 1)) for m in range(1, 13))
+        produtos.append({
+            "codigo": f"ANO/{ano}", "label": f"Ano {ano}", "tipo": "A",
+            "inicio": dt_a, "fim": date(ano+1, 1, 1),
+            "meses": 12, "horas_mes": horas // 12,
+            "fator_prazo": 1 + (12*i * 0.003)
+        })
+
+    return produtos
+
+def _horas_mes(dt: date) -> int:
+    fim = dt + relativedelta(months=1)
+    return int((fim - dt).days * 24)
+
+def _inicio_trimestre(dt: date) -> date:
+    q_month = ((dt.month - 1) // 3) * 3 + 1
+    return dt.replace(month=q_month, day=1)
+
+def _get_produto_by_codigo(codigo: str, gdt: datetime):
+    for p in _gerar_produtos(gdt):
+        if p["codigo"] == codigo:
+            return p
+    return None
+
+# ════════════════════════════════════════════════════════════════════════════════
+# HELPERS DE MERCADO
+# ════════════════════════════════════════════════════════════════════════════════
+def _is_market_open(gdt: datetime) -> bool:
+    if gdt.weekday() >= 5:
+        return False
+    return MARKET_OPEN_HOUR <= gdt.hour < MARKET_CLOSE_HOUR
+
+def _market_status_str(gdt: datetime) -> str:
+    if _is_market_open(gdt):
+        return f"🟢 ABERTO · Fecha em {MARKET_CLOSE_HOUR - gdt.hour}h"
+    elif gdt.weekday() >= 5:
+        return "🔴 FECHADO · Fim de semana"
+    elif gdt.hour < MARKET_OPEN_HOUR:
+        return f"🔴 FECHADO · Abre em {MARKET_OPEN_HOUR - gdt.hour}h"
+    else:
+        return "🔴 FECHADO · Abre amanhã às 09:00"
+
+def _reference_price(produto: dict, subm: str) -> float:
+    """Preço de referência = PLD mensal × fator submercado × fator prazo."""
+    pld  = st.session_state['pld_atual']
+    fsub = SUBM.get(subm, 1.0)
+    fprd = produto.get("fator_prazo", 1.0)
+    return round(pld * fsub * fprd, 2)
+
+# ════════════════════════════════════════════════════════════════════════════════
 # PERSISTÊNCIA
 # ════════════════════════════════════════════════════════════════════════════════
-SAVE_FILE = "energy_trader_save.json"
-
 def _serializar_contrato(c):
     d = dict(c)
     for k in ('data_inicio', 'data_fim'):
@@ -251,10 +336,11 @@ def salvar_estado():
             'plds':  df_hist['PLD (R$/MWh)'].tolist(),
         },
         'meteo':         st.session_state.get('meteo', {}),
-        # ── Turno ──
         'turno':         st.session_state.get('turno', 0),
         'game_datetime': st.session_state['game_datetime'].isoformat(),
         'turn_log':      st.session_state.get('turn_log', []),
+        'order_book':    st.session_state.get('order_book', {}),
+        'pending_rfqs':  st.session_state.get('pending_rfqs', []),
     }
     with open(SAVE_FILE, 'w', encoding='utf-8') as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -304,9 +390,9 @@ def _gerar_meteo_inicial():
 def _atualizar_meteo(game_dt: datetime):
     m = st.session_state['meteo']
     mes = game_dt.month
-    res   = m['reserv'][-1];  aflu = m['afluen'][-1]
-    prec  = m['precip'][-1];  temp = m['temp'][-1]
-    eol   = m['eolica'][-1];  sol  = m['solar'][-1]
+    res  = m['reserv'][-1]; aflu = m['afluen'][-1]
+    prec = m['precip'][-1]; temp = m['temp'][-1]
+    eol  = m['eolica'][-1]; sol  = m['solar'][-1]
     tend_r = 3.0 if mes in [12,1,2,3] else -2.5 if mes in [6,7,8,9] else 0.5
     m['datas'].append(str(game_dt.date()))
     m['reserv'].append(round(max(5,  min(100, res  + tend_r + random.gauss(0, 1.5))), 1))
@@ -319,8 +405,8 @@ def _atualizar_meteo(game_dt: datetime):
 
 def _impacto_meteo_no_pld(meteo):
     fator, alertas = 1.0, []
-    res  = meteo['reserv'][-1]; aflu = meteo['afluen'][-1]
-    eol  = meteo['eolica'][-1]; temp = meteo['temp'][-1]
+    res = meteo['reserv'][-1]; aflu = meteo['afluen'][-1]
+    eol = meteo['eolica'][-1]; temp = meteo['temp'][-1]
     if res < 20:
         fator += 0.35; alertas.append(("🚨","danger",f"Reservatório crítico ({res:.0f}%) — pressão muito alta sobre o PLD"))
     elif res < 40:
@@ -342,64 +428,184 @@ def _impacto_meteo_no_pld(meteo):
     return round(fator, 3), alertas
 
 # ════════════════════════════════════════════════════════════════════════════════
+# LIVRO DE ORDENS
+# ════════════════════════════════════════════════════════════════════════════════
+def _init_order_book():
+    """Inicializa o livro com os produtos dos próximos 3 meses + trimestres + anos."""
+    book = {}
+    gdt  = st.session_state['game_datetime']
+    for prod in _gerar_produtos(gdt)[:10]:  # primeiros 10 produtos
+        codigo = prod["codigo"]
+        book[codigo] = {"bids": [], "asks": []}
+        ref = _reference_price(prod, "SE/CO")
+        for i in range(1, 5):
+            spread_pct = 0.005 + i * 0.004
+            bid_price  = round(ref * (1 - spread_pct * i), 2)
+            ask_price  = round(ref * (1 + spread_pct * i), 2)
+            vol = round(random.uniform(3, 25), 1)
+            cp  = random.choice(COUNTERPARTIES)
+            book[codigo]["bids"].append({"preco": bid_price, "volume_mwm": vol, "contraparte": cp["nome"]})
+            book[codigo]["asks"].append({"preco": ask_price, "volume_mwm": vol, "contraparte": cp["nome"]})
+        book[codigo]["bids"].sort(key=lambda x: -x["preco"])
+        book[codigo]["asks"].sort(key=lambda x:  x["preco"])
+    return book
+
+def _atualizar_order_book():
+    book = st.session_state.get('order_book', {})
+    gdt  = st.session_state['game_datetime']
+    fator_meteo, _ = _impacto_meteo_no_pld(st.session_state['meteo'])
+    for prod in _gerar_produtos(gdt)[:10]:
+        codigo = prod["codigo"]
+        if codigo not in book:
+            book[codigo] = {"bids": [], "asks": []}
+        ref = _reference_price(prod, "SE/CO")
+        for lado in ["bids", "asks"]:
+            niveis = book[codigo][lado]
+            if not niveis:
+                continue
+            for ordem in niveis:
+                ruido   = random.gauss(0, ref * 0.005)
+                pressao = (ref * fator_meteo - ordem["preco"]) * 0.03
+                ordem["preco"]     = round(max(30, min(600, ordem["preco"] + ruido + pressao)), 2)
+                ordem["volume_mwm"] = round(max(1, ordem["volume_mwm"] + random.gauss(0, 1)), 1)
+        book[codigo]["bids"].sort(key=lambda x: -x["preco"])
+        book[codigo]["asks"].sort(key=lambda x:  x["preco"])
+    st.session_state['order_book'] = book
+
+def _gerar_rfq_aleatorio(gdt: datetime):
+    if not _is_market_open(gdt):
+        return None
+    if random.random() > 0.30:
+        return None
+    cp       = random.choice(COUNTERPARTIES)
+    produtos = _cp_produtos(cp, gdt)
+    if not produtos:
+        return None
+    prod = random.choice(produtos)
+    tipo = "Venda" if cp["tipo"] == "Vendedora" else \
+           "Compra" if cp["tipo"] == "Compradora" else \
+           random.choice(["Compra","Venda"])
+    ref    = _reference_price(prod, "SE/CO")
+    desvio = random.uniform(-0.04, 0.04) + cp.get("spread_ref", 0)
+    preco  = round(ref * (1 + desvio), 2)
+    vol    = round(random.uniform(2, 30), 1)  # MW médio
+    return {
+        "id":          random.randint(10000, 99999),
+        "contraparte": cp["nome"],
+        "tipo":        tipo,
+        "produto_cod": prod["codigo"],
+        "produto_lab": prod["label"],
+        "submercado":  random.choice(cp.get("submercados_pref", ["SE/CO"])),
+        "preco":       preco,
+        "volume_mwm":  vol,          # MW médio mensal
+        "referencia":  ref,
+        "desvio_pct":  round(desvio * 100, 1),
+        "timestamp":   gdt.strftime("%d/%m %H:%M"),
+        "status":      "pendente",
+        "expira_turno": st.session_state.get('turno', 0) + random.randint(3, 10),
+    }
+
+def _prob_aceitar(preco_oferta, preco_ref, fator_meteo, tipo_ordem, cp):
+    if tipo_ordem == "Compra":
+        delta_p = (preco_oferta - preco_ref) / max(preco_ref, 1)
+    else:
+        delta_p = (preco_ref - preco_oferta) / max(preco_ref, 1)
+    urgencia = 1 if random.random() < cp.get("agressividade", 0.5) else 0
+    z = 15.0 * delta_p + 0.3 * (fator_meteo - 1.0) + 0.2 * urgencia
+    return round(1 / (1 + math.exp(-z)), 3)
+
+def _executar_ordem_mercado(tipo, produto_cod, volume_mwm, subm, gdt):
+    book = st.session_state.get('order_book', {})
+    if produto_cod not in book:
+        return None, "Produto não encontrado no livro."
+    lado   = "asks" if tipo == "Compra" else "bids"
+    niveis = book[produto_cod][lado]
+    if not niveis:
+        return None, "Sem liquidez no lado solicitado."
+    melhor    = niveis[0]
+    # Ajusta preço pelo submercado
+    fator_sub = SUBM.get(subm, 1.0)
+    preco_exec = round(melhor["preco"] * fator_sub, 2)
+    vol_exec   = min(volume_mwm, melhor["volume_mwm"])
+    melhor["volume_mwm"] = round(melhor["volume_mwm"] - vol_exec, 1)
+    if melhor["volume_mwm"] <= 0:
+        niveis.pop(0)
+    st.session_state['order_book'] = book
+    return {
+        "preco":       preco_exec,
+        "volume_mwm":  vol_exec,
+        "contraparte": melhor["contraparte"],
+        "parcial":     vol_exec < volume_mwm,
+    }, None
+
+# ════════════════════════════════════════════════════════════════════════════════
 # MOTOR DE TURNOS
 # ════════════════════════════════════════════════════════════════════════════════
-HOURS_PER_TURN = 1          # cada turno avança 1 hora
-METEO_UPDATE_HOURS = 24     # meteo atualiza a cada 24h de jogo
-PLD_UPDATE_HOURS   = 6      # PLD atualiza a cada 6h de jogo (4×/dia)
-
 def _avancar_turno():
-    """Avança o clock de jogo em 1 hora e processa todos os efeitos do turno."""
-    # ── Avança clock ──────────────────────────────────────────────────────────
     old_dt: datetime = st.session_state['game_datetime']
     new_dt = old_dt + timedelta(hours=HOURS_PER_TURN)
     st.session_state['game_datetime'] = new_dt
     st.session_state['turno'] += 1
     turno = st.session_state['turno']
-
     eventos = []
 
-    # ── Atualiza PLD a cada PLD_UPDATE_HOURS ──────────────────────────────────
+    # ── PLD mensal update ──────────────────────────────────────────────────────
     if turno % PLD_UPDATE_HOURS == 0:
         fator_meteo, _ = _impacto_meteo_no_pld(st.session_state['meteo'])
-        ruido = random.gauss(0, 8)
-        pld_medio = st.session_state['pld_historico']['PLD (R$/MWh)'].mean()
-        pressao = (pld_medio * fator_meteo - st.session_state['pld_atual']) * 0.06
+        ruido    = random.gauss(0, 8)
+        pld_med  = st.session_state['pld_historico']['PLD (R$/MWh)'].mean()
+        pressao  = (pld_med * fator_meteo - st.session_state['pld_atual']) * 0.06
         novo_pld = max(30, min(500, st.session_state['pld_atual'] + ruido + pressao))
-        delta_pld = novo_pld - st.session_state['pld_atual']
+        delta    = novo_pld - st.session_state['pld_atual']
         st.session_state['pld_atual'] = round(novo_pld, 2)
-        nova_linha = pd.DataFrame({
-            'Data': [new_dt.date()],
-            'PLD (R$/MWh)': [round(novo_pld, 2)]
-        })
+        nova_linha = pd.DataFrame({'Data': [new_dt.date()], 'PLD (R$/MWh)': [round(novo_pld, 2)]})
         st.session_state['pld_historico'] = pd.concat(
             [st.session_state['pld_historico'], nova_linha], ignore_index=True
         )
-        sinal = "pos" if delta_pld >= 0 else "neg"
-        eventos.append(f'<span class="ev">PLD atualizado →</span> <span class="{sinal}">R$ {novo_pld:.2f} ({delta_pld:+.2f})</span>')
+        sinal = "pos" if delta >= 0 else "neg"
+        eventos.append(f'<span class="ev">PLD atualizado →</span> <span class="{sinal}">R$ {novo_pld:.2f} ({delta:+.2f})</span>')
+        _atualizar_order_book()
+        rfq = _gerar_rfq_aleatorio(new_dt)
+        if rfq:
+            pending = st.session_state.get('pending_rfqs', [])
+            pending.append(rfq)
+            st.session_state['pending_rfqs'] = pending
+            eventos.append(f'<span class="rfq">📨 RFQ de {rfq["contraparte"]} — {rfq["tipo"]} {rfq["produto_cod"]} R${rfq["preco"]:.2f} · {rfq["volume_mwm"]:.1f} MWm</span>')
 
-    # ── Atualiza meteo a cada METEO_UPDATE_HOURS ──────────────────────────────
+    # ── Meteo update ──────────────────────────────────────────────────────────
     if turno % METEO_UPDATE_HOURS == 0:
         _atualizar_meteo(new_dt)
-        meteo = st.session_state['meteo']
-        res = meteo['reserv'][-1]
+        res = st.session_state['meteo']['reserv'][-1]
         eventos.append(f'<span class="ev">Meteo atualizado · Reserv.</span> <span class="{"neg" if res < 40 else "pos"}">{res:.0f}%</span>')
 
-    # ── Recalcula PnL de todos os contratos ───────────────────────────────────
+    # ── Expirar RFQs ──────────────────────────────────────────────────────────
+    pending = st.session_state.get('pending_rfqs', [])
+    n_antes = len(pending)
+    pending = [r for r in pending if r['expira_turno'] > turno and r['status'] == 'pendente']
+    if len(pending) < n_antes:
+        eventos.append('<span class="ev">RFQs expirados removidos</span>')
+    st.session_state['pending_rfqs'] = pending
+
+    # ── Avisos de abertura/fechamento ─────────────────────────────────────────
+    if new_dt.hour == MARKET_CLOSE_HOUR:
+        eventos.append('<span class="ev">🔔 Mercado fechou às 18:00</span>')
+    if new_dt.hour == MARKET_OPEN_HOUR and new_dt.weekday() < 5:
+        eventos.append('<span class="ev">🔔 Mercado abriu às 09:00</span>')
+
+    # ── PnL ───────────────────────────────────────────────────────────────────
     for c in st.session_state['contratos']:
         _recalc_pnl(c)
 
-    # ── Registra no log de turnos ─────────────────────────────────────────────
-    log = st.session_state.get('turn_log', [])
+    # ── Log ───────────────────────────────────────────────────────────────────
+    log    = st.session_state.get('turn_log', [])
     ts_str = new_dt.strftime('%d/%m %H:%M')
+    mkt    = "🟢" if _is_market_open(new_dt) else "🔴"
     if eventos:
         for ev in eventos:
-            log.append(f'<span class="ts">[{ts_str}]</span> {ev}')
+            log.append(f'<span class="ts">[{ts_str}] {mkt}</span> {ev}')
     else:
-        log.append(f'<span class="ts">[{ts_str}]</span> <span class="ev">Turno {turno} — mercado estável</span>')
-    # mantém só os últimos 40 eventos
-    st.session_state['turn_log'] = log[-40:]
-
+        log.append(f'<span class="ts">[{ts_str}] {mkt}</span> <span class="ev">Turno {turno} — mercado estável</span>')
+    st.session_state['turn_log'] = log[-50:]
     salvar_estado()
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -407,32 +613,32 @@ def _avancar_turno():
 # ════════════════════════════════════════════════════════════════════════════════
 if 'estado_carregado' not in st.session_state:
     salvo = carregar_estado()
-
     if salvo:
         datas = [date.fromisoformat(d) for d in salvo['pld_historico']['datas']]
-        st.session_state['pld_historico'] = pd.DataFrame({
-            'Data': datas, 'PLD (R$/MWh)': salvo['pld_historico']['plds'],
-        })
-        st.session_state['pld_atual']   = salvo['pld_atual']
-        st.session_state['saldo_caixa'] = salvo['saldo_caixa']
-        st.session_state['pagina']      = salvo.get('pagina', 'mercado')
-        st.session_state['contratos']   = [_desserializar_contrato(c) for c in salvo['contratos']]
-        st.session_state['meteo']       = salvo.get('meteo') or _gerar_meteo_inicial()
-        st.session_state['turno']       = salvo.get('turno', 0)
-        st.session_state['turn_log']    = salvo.get('turn_log', [])
+        st.session_state['pld_historico'] = pd.DataFrame({'Data': datas, 'PLD (R$/MWh)': salvo['pld_historico']['plds']})
+        st.session_state['pld_atual']    = salvo['pld_atual']
+        st.session_state['saldo_caixa']  = salvo['saldo_caixa']
+        st.session_state['pagina']       = salvo.get('pagina', 'mercado')
+        st.session_state['contratos']    = [_desserializar_contrato(c) for c in salvo['contratos']]
+        st.session_state['meteo']        = salvo.get('meteo') or _gerar_meteo_inicial()
+        st.session_state['turno']        = salvo.get('turno', 0)
+        st.session_state['turn_log']     = salvo.get('turn_log', [])
+        st.session_state['pending_rfqs'] = salvo.get('pending_rfqs', [])
         gdt = salvo.get('game_datetime')
-        st.session_state['game_datetime'] = (
-            datetime.fromisoformat(gdt) if gdt
-            else datetime.now().replace(minute=0, second=0, microsecond=0)
-        )
+        st.session_state['game_datetime'] = datetime.fromisoformat(gdt) if gdt else datetime.now().replace(minute=0, second=0, microsecond=0)
+        ob = salvo.get('order_book')
+        st.session_state['order_book'] = ob if ob else {}
     else:
-        st.session_state['contratos']     = []
-        st.session_state['saldo_caixa']   = 0.0
-        st.session_state['pagina']        = 'mercado'
-        st.session_state['turno']         = 0
-        st.session_state['turn_log']      = []
-        st.session_state['game_datetime'] = datetime.now().replace(minute=0, second=0, microsecond=0)
-
+        st.session_state['contratos']    = []
+        st.session_state['saldo_caixa']  = 0.0
+        st.session_state['pagina']       = 'mercado'
+        st.session_state['turno']        = 0
+        st.session_state['turn_log']     = []
+        st.session_state['pending_rfqs'] = []
+        now = datetime.now().replace(minute=0, second=0, microsecond=0)
+        days_to_monday = (7 - now.weekday()) % 7
+        start = (now + timedelta(days=days_to_monday)).replace(hour=9)
+        st.session_state['game_datetime'] = start
         base_date = date.today().replace(day=1)
         datas = [base_date - relativedelta(months=i) for i in range(23, -1, -1)]
         plds, pld_v = [], 80.0
@@ -442,162 +648,152 @@ if 'estado_carregado' not in st.session_state:
         st.session_state['pld_historico'] = pd.DataFrame({'Data': datas, 'PLD (R$/MWh)': plds})
         st.session_state['pld_atual']     = st.session_state['pld_historico']['PLD (R$/MWh)'].iloc[-1]
         st.session_state['meteo']         = _gerar_meteo_inicial()
-
+        st.session_state['order_book']    = {}
     st.session_state['estado_carregado'] = True
+    # Garante livro inicializado
+    if not st.session_state.get('order_book'):
+        st.session_state['order_book'] = _init_order_book()
 
 # ════════════════════════════════════════════════════════════════════════════════
-# HELPERS
+# HELPERS GERAIS
 # ════════════════════════════════════════════════════════════════════════════════
-def _recalc_pnl(contrato):
-    pld = st.session_state['pld_atual']
-    vol = contrato['volume_mw'] * contrato['horas']
-    if contrato['tipo'] == 'Compra':
-        contrato['pnl_atual'] = (pld - contrato['preco']) * vol
+def _recalc_pnl(c):
+    """PnL em R$ = (PLD - Preço) × volume_mwm × horas_mes."""
+    pld  = st.session_state['pld_atual']
+    horas = c.get('horas', 720)
+    vol   = c.get('volume_mwm', c.get('volume_mw', 1))  # backward compat
+    if c['tipo'] == 'Compra':
+        c['pnl_atual'] = (pld - c['preco']) * vol * horas
     else:
-        contrato['pnl_atual'] = (contrato['preco'] - pld) * vol
+        c['pnl_atual'] = (c['preco'] - pld) * vol * horas
 
-def _cor_pnl(v):
-    return "#00d4aa" if v >= 0 else "#fb7185"
+def _cor_pnl(v):   return "#00d4aa" if v >= 0 else "#fb7185"
+def _fmt_brl(v):   return f"{'+'if v>=0 else ''}R$ {v:,.2f}"
+def _fmt_mwm(v):   return f"{v:.1f} MWm"
 
-def _fmt_brl(v):
-    return f"{'+'if v>=0 else ''}R$ {v:,.2f}"
-
-SUBM = {"SE/CO": 1.0, "S": 0.95, "NE": 1.05, "N": 1.10}
-TIPOS_ENERGIA = ["Convencional", "Incentivada 50%", "Incentivada 100%"]
-INDICES = ["Preço Fixo", "PLD Spot", "PLD Médio Mensal", "IPCA + Spread", "IGP-M + Spread"]
+def _registrar_contrato_negociado(tipo, preco, volume_mwm, produto, subm, contraparte, gdt):
+    horas = produto.get("horas_mes", 720)
+    novo = {
+        'id':          len(st.session_state['contratos']) + 1,
+        'nome':        f"{tipo[:1]}{produto['codigo']}-{contraparte[:10]}",
+        'contraparte': contraparte,
+        'tipo':        tipo,
+        'submercado':  subm,
+        'tipo_energia':'Convencional',
+        'preco':       preco,
+        'volume_mwm':  volume_mwm,   # MW médio mensal
+        'indice':      'Preço Fixo',
+        'data_inicio': produto['inicio'],
+        'data_fim':    produto['fim'],
+        'horas':       horas,
+        'gross_up':    False,
+        'flag_pc':     False,
+        'obs':         f'Via livro · {produto["label"]} · {subm}',
+        'pnl_atual':   0.0,
+        'criado_em':   datetime.now(),
+        'produto_cod': produto['codigo'],
+        'produto_lab': produto['label'],
+    }
+    _recalc_pnl(novo)
+    st.session_state['contratos'].append(novo)
+    salvar_estado()
+    return novo
 
 # ════════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ════════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("""
-    <div style='padding: 0.5rem 0 0.75rem;'>
-        <div style='font-family: Syne, sans-serif; font-size: 1.2rem; font-weight: 800;
-                    color: #00d4aa; letter-spacing: -0.02em;'>⚡ EnergyTrader</div>
-        <div style='font-family: JetBrains Mono, monospace; font-size: 0.65rem;
-                    color: #475569; text-transform: uppercase; letter-spacing: 0.1em;
-                    margin-top: 2px;'>Simulador · Mercado Livre</div>
-    </div>
-    """, unsafe_allow_html=True)
-
+    <div style='padding:0.5rem 0 0.75rem;'>
+        <div style='font-family:Syne,sans-serif;font-size:1.2rem;font-weight:800;color:#00d4aa;letter-spacing:-0.02em;'>⚡ EnergyTrader</div>
+        <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.1em;margin-top:2px;'>Simulador · Mercado Livre v4</div>
+    </div>""", unsafe_allow_html=True)
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # ── Relógio do jogo ───────────────────────────────────────────────────────
-    gdt: datetime = st.session_state['game_datetime']
-    turno = st.session_state['turno']
-
-    DIAS_PT = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"]
+    gdt    = st.session_state['game_datetime']
+    turno  = st.session_state['turno']
+    DIAS_PT  = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"]
     MESES_PT = ["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-    dia_semana = DIAS_PT[gdt.weekday()]
-    mes_str    = MESES_PT[gdt.month]
+    mkt_open  = _is_market_open(gdt)
+    mkt_class = "market-status-open" if mkt_open else "market-status-closed"
 
     st.markdown(f"""
     <div class='turn-clock'>
         <div class='clock-time'>{gdt.strftime('%H:%M')}</div>
-        <div class='clock-date'>{dia_semana}, {gdt.day} {mes_str} {gdt.year}</div>
-        <div class='clock-turn'>Turno #{turno} · +{HOURS_PER_TURN}h por avanço</div>
-    </div>
-    """, unsafe_allow_html=True)
+        <div class='clock-date'>{DIAS_PT[gdt.weekday()]}, {gdt.day} {MESES_PT[gdt.month]} {gdt.year}</div>
+        <div class='{mkt_class}'>{_market_status_str(gdt)}</div>
+        <div class='clock-turn'>Turno #{turno} · +1h/avanço · PLD mensal</div>
+    </div>""", unsafe_allow_html=True)
 
-    # ── Botão central: AVANÇAR TURNO ─────────────────────────────────────────
     if st.button("⏩  AVANÇAR TURNO  (+1h)", use_container_width=True, type="primary"):
-        _avancar_turno()
-        st.rerun()
+        _avancar_turno(); st.rerun()
+
+    rfqs_pend = [r for r in st.session_state.get('pending_rfqs',[]) if r['status']=='pendente']
+    if rfqs_pend:
+        st.markdown(f"""<div style='background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);
+                    border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.5rem;
+                    font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#a78bfa;'>
+            📨 {len(rfqs_pend)} RFQ(s) aguardando</div>""", unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
-
-    # ── PLD + stats portfólio ─────────────────────────────────────────────────
     pld = st.session_state['pld_atual']
-    st.markdown(f"""
-    <div style='background:#111827; border:1px solid #1e293b; border-radius:6px;
-                padding: 0.75rem 1rem; margin-bottom: 0.75rem;'>
-        <div style='font-family: JetBrains Mono, monospace; font-size: 0.6rem;
-                    color: #475569; text-transform: uppercase; letter-spacing: 0.1em;'>
-            PLD Atual (SE/CO)
-        </div>
-        <div style='font-family: JetBrains Mono, monospace; font-size: 1.4rem;
-                    font-weight: 700; color: #00d4aa; margin-top: 4px;'>
-            R$ {pld:.2f}
-        </div>
-        <div style='font-family: JetBrains Mono, monospace; font-size: 0.65rem;
-                    color: #475569;'>R$/MWh · atualiza cada {PLD_UPDATE_HOURS}h</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div style='background:#111827;border:1px solid #1e293b;border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.75rem;'>
+        <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>PLD Mensal (SE/CO)</div>
+        <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;font-weight:700;color:#00d4aa;margin-top:4px;'>R$ {pld:.2f}</div>
+        <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;'>R$/MWh · atualiza cada {PLD_UPDATE_HOURS}h</div>
+    </div>""", unsafe_allow_html=True)
 
-    n_contratos = len(st.session_state['contratos'])
-    pnl_total   = sum(c.get('pnl_atual', 0) for c in st.session_state['contratos'])
-    st.markdown(f"""
-    <div style='display: flex; gap: 8px; margin-bottom: 0.75rem;'>
-        <div style='flex:1; background:#111827; border:1px solid #1e293b; border-radius:6px; padding:0.6rem 0.75rem;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.55rem; color:#475569; text-transform:uppercase;'>Contratos</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:1.1rem; font-weight:700; color:#e2e8f0;'>{n_contratos}</div>
+    n_c      = len(st.session_state['contratos'])
+    pnl_tot  = sum(c.get('pnl_atual',0) for c in st.session_state['contratos'])
+    st.markdown(f"""<div style='display:flex;gap:8px;margin-bottom:0.75rem;'>
+        <div style='flex:1;background:#111827;border:1px solid #1e293b;border-radius:6px;padding:0.6rem 0.75rem;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.55rem;color:#475569;text-transform:uppercase;'>Contratos</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.1rem;font-weight:700;color:#e2e8f0;'>{n_c}</div>
         </div>
-        <div style='flex:1; background:#111827; border:1px solid #1e293b; border-radius:6px; padding:0.6rem 0.75rem;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.55rem; color:#475569; text-transform:uppercase;'>PnL Total</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:1.1rem; font-weight:700;
-                        color:{"#00d4aa" if pnl_total >= 0 else "#fb7185"}'>
-                {"+" if pnl_total >= 0 else ""}R${pnl_total/1000:.1f}k
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        <div style='flex:1;background:#111827;border:1px solid #1e293b;border-radius:6px;padding:0.6rem 0.75rem;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.55rem;color:#475569;text-transform:uppercase;'>PnL Total</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.1rem;font-weight:700;color:{"#00d4aa" if pnl_tot>=0 else "#fb7185"}'>
+                {"+" if pnl_tot>=0 else ""}R${pnl_tot/1000:.1f}k</div>
+        </div></div>""", unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # ── Navegação ─────────────────────────────────────────────────────────────
     def nav(label, key):
         ativo = st.session_state['pagina'] == key
-        style = "color: #00d4aa; font-weight: 700;" if ativo else ""
+        style = "color:#00d4aa;font-weight:700;" if ativo else ""
         st.markdown(f"<div style='{style}'>", unsafe_allow_html=True)
         if st.button(label, key=f"nav_{key}", use_container_width=True):
-            st.session_state['pagina'] = key
-            salvar_estado()
-            st.rerun()
+            st.session_state['pagina'] = key; salvar_estado(); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
     nav("📊  Painel de Mercado",  "mercado")
+    nav("📒  Livro de Negócios",  "livro")
+    nav("📨  RFQs",               "rfqs")
     nav("🌦️  Meteorologia",       "meteo")
     nav("📋  Novo Contrato",      "novo_contrato")
     nav("💼  Meu Portfólio",      "portfolio")
     nav("💰  PnL & Resultado",    "pnl")
     nav("📜  Log de Turnos",      "log")
+    nav("🏢  Contrapartes",       "contrapartes")
     nav("📚  Glossário",          "glossario")
 
     st.markdown("<hr>", unsafe_allow_html=True)
-
-    col_save, col_reset = st.columns(2)
-    with col_save:
-        if st.button("💾  Salvar", use_container_width=True):
-            salvar_estado()
-            st.toast("✅ Progresso salvo!", icon="💾")
-    with col_reset:
-        if st.button("🗑️  Resetar", use_container_width=True):
+    col_s, col_r = st.columns(2)
+    with col_s:
+        if st.button("💾 Salvar", use_container_width=True):
+            salvar_estado(); st.toast("✅ Salvo!", icon="💾")
+    with col_r:
+        if st.button("🗑️ Resetar", use_container_width=True):
             st.session_state['confirmar_reset'] = True
-
     if st.session_state.get('confirmar_reset'):
-        st.markdown("""
-        <div style='background:rgba(251,113,133,0.08); border:1px solid rgba(251,113,133,0.3);
-                    border-radius:6px; padding:0.6rem 0.75rem; margin-top:0.25rem;
-                    font-family:JetBrains Mono,monospace; font-size:0.72rem; color:#fb7185;'>
-            Tem certeza? Apaga todos os dados.
-        </div>
-        """, unsafe_allow_html=True)
-        col_sim, col_nao = st.columns(2)
-        with col_sim:
-            if st.button("Sim", key="reset_sim", use_container_width=True):
+        st.markdown("<div class='danger-box'>Apaga todos os dados?</div>", unsafe_allow_html=True)
+        cs, cn = st.columns(2)
+        with cs:
+            if st.button("Sim", key="rs_sim", use_container_width=True):
                 resetar_estado(); st.rerun()
-        with col_nao:
-            if st.button("Não", key="reset_nao", use_container_width=True):
+        with cn:
+            if st.button("Não", key="rs_nao", use_container_width=True):
                 st.session_state['confirmar_reset'] = False; st.rerun()
-
-    if os.path.exists(SAVE_FILE):
-        mtime = datetime.fromtimestamp(os.path.getmtime(SAVE_FILE))
-        st.markdown(f"""
-        <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem;
-                    color:#334155; text-align:center; margin-top:0.4rem;'>
-            último save {mtime.strftime('%d/%m %H:%M')}
-        </div>
-        """, unsafe_allow_html=True)
 
 pagina = st.session_state['pagina']
 
@@ -607,96 +803,317 @@ pagina = st.session_state['pagina']
 if pagina == 'mercado':
     gdt = st.session_state['game_datetime']
     st.markdown("# 📊 Painel de Mercado")
-    st.markdown(f"<p style='color:#475569; font-size:0.85rem; margin-top:-0.5rem;'>Data/hora do jogo: <b style='color:#00d4aa'>{gdt.strftime('%d/%m/%Y %H:%M')}</b> · Turno #{st.session_state['turno']}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:#475569;font-size:0.85rem;margin-top:-0.5rem;'>Data do jogo: <b style='color:#00d4aa'>{gdt.strftime('%d/%m/%Y %H:%M')}</b> · Turno #{turno} · {_market_status_str(gdt)}</p>", unsafe_allow_html=True)
     st.markdown("---")
 
-    pld     = st.session_state['pld_atual']
-    df_hist = st.session_state['pld_historico']
-    var_pld = pld - df_hist['PLD (R$/MWh)'].iloc[-2] if len(df_hist) > 1 else 0
-
+    pld      = st.session_state['pld_atual']
+    df_hist  = st.session_state['pld_historico']
+    var_pld  = pld - df_hist['PLD (R$/MWh)'].iloc[-2] if len(df_hist) > 1 else 0
     fator_meteo, alertas = _impacto_meteo_no_pld(st.session_state['meteo'])
+
     for icone, tipo, msg in alertas[:3]:
-        box_class = "danger-box" if tipo == "danger" else "warn-box" if tipo == "warn" else "info-box"
+        box_class = "danger-box" if tipo=="danger" else "warn-box" if tipo=="warn" else "info-box"
         st.markdown(f"<div class='{box_class}'>{icone} {msg}</div>", unsafe_allow_html=True)
+    if not _is_market_open(gdt):
+        st.markdown(f"<div class='market-closed-box'>🔴 {_market_status_str(gdt)} — Ordens executadas entre 09:00 e 18:00</div>", unsafe_allow_html=True)
 
     st.markdown("")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("PLD SE/CO", f"R$ {pld:.2f}", f"{var_pld:+.2f} R$/MWh")
-    c2.metric("PLD Sul",   f"R$ {pld*SUBM['S']:.2f}",  "−5% SE/CO")
-    c3.metric("PLD NE",    f"R$ {pld*SUBM['NE']:.2f}", "+5% SE/CO")
-    c4.metric("PLD Norte", f"R$ {pld*SUBM['N']:.2f}",  "+10% SE/CO")
+    c1.metric("PLD SE/CO",  f"R$ {pld:.2f}",               f"{var_pld:+.2f} R$/MWh")
+    c2.metric("PLD Sul",    f"R$ {pld*SUBM['S']:.2f}",     "−5% SE/CO")
+    c3.metric("PLD NE",     f"R$ {pld*SUBM['NE']:.2f}",    "+5% SE/CO")
+    c4.metric("PLD Norte",  f"R$ {pld*SUBM['N']:.2f}",     "+10% SE/CO")
 
     st.markdown("")
-    col_graf, col_info = st.columns([3, 1])
-
-    with col_graf:
+    col_g, col_i = st.columns([3,1])
+    with col_g:
         fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df_hist['Data'].astype(str), y=df_hist['PLD (R$/MWh)'],
+        fig.add_trace(go.Scatter(x=df_hist['Data'].astype(str), y=df_hist['PLD (R$/MWh)'],
             mode='lines', line=dict(color='#00d4aa', width=2),
             fill='tozeroy', fillcolor='rgba(0,212,170,0.07)',
-            name='PLD SE/CO',
-            hovertemplate='%{x}<br>PLD: R$ %{y:.2f}<extra></extra>'
-        ))
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            hovertemplate='%{x}<br>PLD: R$ %{y:.2f}<extra></extra>'))
+        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
             xaxis=dict(gridcolor='#1e293b', color='#475569'),
             yaxis=dict(gridcolor='#1e293b', color='#475569', title='R$/MWh'),
-            margin=dict(l=10, r=10, t=30, b=10), height=300,
+            margin=dict(l=10,r=10,t=30,b=10), height=300,
             font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
-            title=dict(text='Histórico PLD SE/CO (Simulado)', font=dict(size=13, color='#94a3b8'))
-        )
+            title=dict(text='Histórico PLD SE/CO — Mensal Simulado', font=dict(size=13, color='#94a3b8')))
         st.plotly_chart(fig, use_container_width=True)
-
-    with col_info:
+    with col_i:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#475569; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.75rem;'>Estatísticas (24m)</div>", unsafe_allow_html=True)
-        stats = {
-            "Mínimo": df_hist['PLD (R$/MWh)'].min(),
-            "Máximo": df_hist['PLD (R$/MWh)'].max(),
-            "Média":  df_hist['PLD (R$/MWh)'].mean(),
-            "Desvio": df_hist['PLD (R$/MWh)'].std(),
-        }
-        for k, v in stats.items():
-            st.markdown(f"""
-            <div style='display:flex; justify-content:space-between; padding:4px 0;
-                        border-bottom:1px solid #1e293b; font-family:JetBrains Mono,monospace; font-size:0.8rem;'>
-                <span style='color:#64748b;'>{k}</span>
-                <span style='color:#e2e8f0;'>R$ {v:.2f}</span>
-            </div>""", unsafe_allow_html=True)
-        cor_fator = "#00d4aa" if fator_meteo <= 1.0 else "#fbbf24" if fator_meteo <= 1.2 else "#fb7185"
-        st.markdown(f"""
-        <div style='display:flex; justify-content:space-between; padding:6px 0 0 0;
-                    font-family:JetBrains Mono,monospace; font-size:0.8rem;'>
+        st.markdown("<div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;margin-bottom:0.75rem;'>Estatísticas (24m)</div>", unsafe_allow_html=True)
+        for k, v in {"Mínimo": df_hist['PLD (R$/MWh)'].min(), "Máximo": df_hist['PLD (R$/MWh)'].max(),
+                     "Média":  df_hist['PLD (R$/MWh)'].mean(), "Desvio": df_hist['PLD (R$/MWh)'].std()}.items():
+            st.markdown(f"""<div style='display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e293b;font-family:JetBrains Mono,monospace;font-size:0.8rem;'>
+                <span style='color:#64748b;'>{k}</span><span style='color:#e2e8f0;'>R$ {v:.2f}</span></div>""", unsafe_allow_html=True)
+        cor_f = "#00d4aa" if fator_meteo <= 1.0 else "#fbbf24" if fator_meteo <= 1.2 else "#fb7185"
+        st.markdown(f"""<div style='display:flex;justify-content:space-between;padding:6px 0 0;font-family:JetBrains Mono,monospace;font-size:0.8rem;'>
             <span style='color:#64748b;'>Pressão Meteo</span>
-            <span style='color:{cor_fator}; font-weight:700;'>{fator_meteo:.2f}×</span>
-        </div>""", unsafe_allow_html=True)
+            <span style='color:{cor_f};font-weight:700;'>{fator_meteo:.2f}×</span></div>""", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # Curva Forward compacta no painel
+    st.markdown("---")
+    st.markdown("#### 📈 Curva Forward — Próximos 6 meses")
+    produtos_graf = _gerar_produtos(gdt)[:6]
+    fig_fw = go.Figure()
+    fig_fw.add_trace(go.Bar(
+        x=[p["codigo"] for p in produtos_graf],
+        y=[_reference_price(p, "SE/CO") for p in produtos_graf],
+        marker_color=['#00d4aa' if i == 0 else '#334155' for i in range(len(produtos_graf))],
+        text=[f"R${_reference_price(p,'SE/CO'):.2f}" for p in produtos_graf],
+        textposition='outside', textfont=dict(family='JetBrains Mono', size=10, color='#94a3b8'),
+        hovertemplate='%{x}<br>R$ %{y:.2f}<extra></extra>'))
+    fig_fw.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(gridcolor='#1e293b', color='#475569'),
+        yaxis=dict(gridcolor='#1e293b', color='#475569', title='R$/MWh'),
+        margin=dict(l=10,r=10,t=10,b=10), height=200,
+        font=dict(family='JetBrains Mono', size=11, color='#94a3b8'))
+    st.plotly_chart(fig_fw, use_container_width=True)
 
     st.markdown("---")
     st.markdown("#### 🔢 Calculadora Rápida de Exposição")
     cc1, cc2, cc3 = st.columns(3)
-    with cc1: vol_calc  = st.number_input("Volume (MW médio)", min_value=0.1, value=5.0, step=0.5)
-    with cc2: preco_calc = st.number_input("Preço Contratado (R$/MWh)", min_value=0.0, value=float(round(pld,0)), step=1.0)
-    with cc3: horas_calc = st.number_input("Horas do período", min_value=1, value=720, step=24)
-    vol_total = vol_calc * horas_calc
-    exposicao = (pld - preco_calc) * vol_total
-    st.markdown(f"""
-    <div style='display:flex; gap:1rem; margin-top:0.5rem;'>
+    with cc1: vol_c  = st.number_input("Volume (MW médio)", min_value=0.1, value=5.0, step=0.5)
+    with cc2: preco_c = st.number_input("Preço (R$/MWh)", min_value=0.0, value=float(round(pld,0)), step=1.0)
+    with cc3: horas_c = st.number_input("Horas do período", min_value=1, value=720, step=24)
+    exp = (pld - preco_c) * vol_c * horas_c
+    st.markdown(f"""<div style='display:flex;gap:1rem;margin-top:0.5rem;'>
         <div class='card' style='flex:1;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#475569; text-transform:uppercase;'>Volume Total</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:1.3rem; font-weight:700; color:#e2e8f0;'>{vol_total:,.0f} MWh</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;'>Energia Total</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.3rem;font-weight:700;color:#e2e8f0;'>{vol_c*horas_c:,.0f} MWh</div>
         </div>
         <div class='card' style='flex:1;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#475569; text-transform:uppercase;'>PnL se comprado</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:1.3rem; font-weight:700; color:{_cor_pnl(exposicao)};'>{_fmt_brl(exposicao)}</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;'>PnL se comprado</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.3rem;font-weight:700;color:{_cor_pnl(exp)};'>{_fmt_brl(exp)}</div>
         </div>
         <div class='card' style='flex:1;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#475569; text-transform:uppercase;'>PnL se vendido</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:1.3rem; font-weight:700; color:{_cor_pnl(-exposicao)};'>{_fmt_brl(-exposicao)}</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;'>PnL se vendido</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.3rem;font-weight:700;color:{_cor_pnl(-exp)};'>{_fmt_brl(-exp)}</div>
+        </div></div>""", unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════════════════════════════════════
+# LIVRO DE NEGÓCIOS
+# ════════════════════════════════════════════════════════════════════════════════
+elif pagina == 'livro':
+    gdt      = st.session_state['game_datetime']
+    mkt_open = _is_market_open(gdt)
+    st.markdown("# 📒 Livro de Negócios")
+    st.markdown(f"<p style='color:#475569;font-size:0.85rem;margin-top:-0.5rem;'>Order book por produto · Volumes em <b>MW médio mensal</b> · {_market_status_str(gdt)}</p>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    if not mkt_open:
+        st.markdown(f"<div class='market-closed-box'>🔴 <b>Mercado Fechado</b><br>Livro ativo apenas entre 09:00 e 18:00 de dias úteis.</div>", unsafe_allow_html=True)
+
+    # Seletor de produto com nome do mês
+    produtos_disp = _gerar_produtos(gdt)
+    prod_opcoes   = {p["codigo"]: f"{p['codigo']} — {p['label']}" for p in produtos_disp}
+    col_sel1, col_sel2 = st.columns(2)
+    with col_sel1:
+        prod_cod_sel = st.selectbox("Produto", list(prod_opcoes.keys()),
+                                    format_func=lambda x: prod_opcoes[x], key="livro_produto")
+    with col_sel2:
+        subm_sel = st.selectbox("Submercado", list(SUBM.keys()), key="livro_subm")
+
+    prod_sel   = _get_produto_by_codigo(prod_cod_sel, gdt)
+    book       = st.session_state.get('order_book', {})
+    bids       = book.get(prod_cod_sel, {}).get("bids", [])
+    asks       = book.get(prod_cod_sel, {}).get("asks", [])
+    fator_subm = SUBM[subm_sel]
+    ref        = _reference_price(prod_sel, subm_sel) if prod_sel else 0
+
+    bids_adj = [{"preco": round(b["preco"]*fator_subm,2), "volume_mwm": b["volume_mwm"], "contraparte": b["contraparte"]} for b in bids]
+    asks_adj = [{"preco": round(a["preco"]*fator_subm,2), "volume_mwm": a["volume_mwm"], "contraparte": a["contraparte"]} for a in asks]
+
+    melhor_bid = bids_adj[0]["preco"] if bids_adj else None
+    melhor_ask = asks_adj[0]["preco"] if asks_adj else None
+    spread     = round(melhor_ask - melhor_bid, 2) if (melhor_bid and melhor_ask) else None
+
+    st.markdown(f"""<div style='display:flex;gap:1rem;margin-bottom:1rem;'>
+        <div style='flex:1;background:#111827;border:1px solid #1e293b;border-radius:6px;padding:0.75rem 1rem;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>Referência {prod_cod_sel} {subm_sel}</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;font-weight:700;color:#e2e8f0;'>R$ {ref:.2f}</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#334155;'>{prod_sel["label"] if prod_sel else ""}</div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        <div style='flex:1;background:#111827;border:1px solid rgba(0,212,170,0.2);border-radius:6px;padding:0.75rem 1rem;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>Melhor Bid</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;font-weight:700;color:#00d4aa;'>{"R$ "+str(melhor_bid) if melhor_bid else "—"}</div>
+        </div>
+        <div style='flex:1;background:#111827;border:1px solid rgba(251,113,133,0.2);border-radius:6px;padding:0.75rem 1rem;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>Melhor Ask</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;font-weight:700;color:#fb7185;'>{"R$ "+str(melhor_ask) if melhor_ask else "—"}</div>
+        </div>
+        <div style='flex:1;background:#111827;border:1px solid #1e293b;border-radius:6px;padding:0.75rem 1rem;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>Spread</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;font-weight:700;color:#fbbf24;'>{"R$ "+str(spread) if spread else "—"}</div>
+        </div></div>""", unsafe_allow_html=True)
+
+    col_bid, col_ask = st.columns(2)
+    with col_bid:
+        st.markdown("<div style='font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#00d4aa;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;'>🟢 COMPRA (BID) — MW médio</div>", unsafe_allow_html=True)
+        for i, b in enumerate(bids_adj[:6]):
+            opac = max(0.3, 1 - i*0.15)
+            st.markdown(f"""<div style='display:flex;justify-content:space-between;align-items:center;
+                background:rgba(0,212,170,{opac*0.08:.2f});border:1px solid rgba(0,212,170,{opac*0.2:.2f});
+                border-radius:4px;padding:6px 12px;margin-bottom:3px;font-family:JetBrains Mono,monospace;font-size:0.8rem;'>
+                <span style='color:#00d4aa;font-weight:700;'>R$ {b["preco"]:.2f}</span>
+                <span style='color:#64748b;'>{b["volume_mwm"]:.1f} MWm</span>
+                <span style='color:#334155;font-size:0.65rem;'>{b["contraparte"][:18]}</span>
+            </div>""", unsafe_allow_html=True)
+    with col_ask:
+        st.markdown("<div style='font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#fb7185;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;'>🔴 VENDA (ASK) — MW médio</div>", unsafe_allow_html=True)
+        for i, a in enumerate(asks_adj[:6]):
+            opac = max(0.3, 1 - i*0.15)
+            st.markdown(f"""<div style='display:flex;justify-content:space-between;align-items:center;
+                background:rgba(251,113,133,{opac*0.08:.2f});border:1px solid rgba(251,113,133,{opac*0.2:.2f});
+                border-radius:4px;padding:6px 12px;margin-bottom:3px;font-family:JetBrains Mono,monospace;font-size:0.8rem;'>
+                <span style='color:#fb7185;font-weight:700;'>R$ {a["preco"]:.2f}</span>
+                <span style='color:#64748b;'>{a["volume_mwm"]:.1f} MWm</span>
+                <span style='color:#334155;font-size:0.65rem;'>{a["contraparte"][:18]}</span>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("#### ⚡ Enviar Ordem")
+    if not mkt_open:
+        st.markdown("<div class='warn-box'>⚠️ Mercado fechado. Avance turnos até às 09:00.</div>", unsafe_allow_html=True)
+    else:
+        with st.form("form_ordem"):
+            col1, col2, col3, col4 = st.columns(4)
+            with col1: tipo_ord   = st.selectbox("Operação", ["Compra","Venda"])
+            with col2: tipo_order = st.selectbox("Tipo de Ordem", ORDER_TYPES)
+            with col3: vol_ord    = st.number_input("Volume (MW médio)", min_value=0.5, value=5.0, step=0.5,
+                                                     help="MW médio mensal — o simulador calcula a energia total automaticamente")
+            with col4: preco_ord  = st.number_input("Preço (R$/MWh)", min_value=30.0, value=float(round(ref,0)), step=0.5)
+            sub_ord = st.form_submit_button("📤  ENVIAR ORDEM", type="primary", use_container_width=True)
+
+        if sub_ord and prod_sel:
+            fm, _ = _impacto_meteo_no_pld(st.session_state['meteo'])
+            if tipo_order == "Mercado (Market)":
+                resultado, erro = _executar_ordem_mercado(tipo_ord, prod_cod_sel, vol_ord, subm_sel, gdt)
+                if erro:
+                    st.error(f"⚠️ {erro}")
+                elif resultado:
+                    c = _registrar_contrato_negociado(tipo_ord, resultado["preco"], resultado["volume_mwm"], prod_sel, subm_sel, resultado["contraparte"], gdt)
+                    log = st.session_state.get('turn_log',[])
+                    log.append(f'<span class="ts">[{gdt.strftime("%d/%m %H:%M")}]</span> <span class="deal">✅ DEAL — {tipo_ord} {resultado["volume_mwm"]:.1f}MWm {prod_cod_sel} @ R${resultado["preco"]:.2f} c/ {resultado["contraparte"]}</span>')
+                    st.session_state['turn_log'] = log[-50:]
+                    salvar_estado()
+                    st.success(f"✅ Executado! {tipo_ord} de **{resultado['volume_mwm']:.1f} MWm** a **R$ {resultado['preco']:.2f}/MWh** com **{resultado['contraparte']}**")
+                    if resultado.get("parcial"):
+                        st.warning("⚠️ Execução parcial — volume disponível era menor.")
+            else:
+                cp_sel = random.choice(COUNTERPARTIES)
+                prob   = _prob_aceitar(preco_ord, ref, fm, tipo_ord, cp_sel)
+                if random.random() < prob:
+                    c = _registrar_contrato_negociado(tipo_ord, preco_ord, vol_ord, prod_sel, subm_sel, cp_sel["nome"], gdt)
+                    log = st.session_state.get('turn_log',[])
+                    log.append(f'<span class="ts">[{gdt.strftime("%d/%m %H:%M")}]</span> <span class="deal">✅ DEAL — {tipo_ord} {vol_ord:.1f}MWm {prod_cod_sel} @ R${preco_ord:.2f} c/ {cp_sel["nome"]}</span>')
+                    st.session_state['turn_log'] = log[-50:]
+                    salvar_estado()
+                    st.success(f"✅ Aceito por **{cp_sel['nome']}** (prob. {prob:.0%})")
+                else:
+                    desvio = round((preco_ord - ref) / ref * 100, 1)
+                    if abs(desvio) > 5:
+                        st.error(f"❌ Recusado — preço {desvio:+.1f}% fora da referência R$ {ref:.2f}")
+                    else:
+                        cp2 = round(ref * (0.99 if tipo_ord=="Compra" else 1.01), 2)
+                        st.warning(f"🔄 **{cp_sel['nome']}** contrapropos R$ {cp2:.2f}/MWh (prob. aceite {prob:.0%}). Ajuste e reenvie.")
+
+    # Curva completa
+    st.markdown("---")
+    st.markdown("#### 📋 Curva Forward Completa")
+    todos_prods = _gerar_produtos(gdt)
+    mensal   = [p for p in todos_prods if p["tipo"]=="M"]
+    trimest  = [p for p in todos_prods if p["tipo"]=="Q"]
+    anual    = [p for p in todos_prods if p["tipo"]=="A"]
+    fig_fw2 = go.Figure()
+    fig_fw2.add_trace(go.Scatter(x=[p["codigo"] for p in mensal], y=[_reference_price(p, subm_sel) for p in mensal],
+        mode='lines+markers', name='Mensal', line=dict(color='#00d4aa',width=2), marker=dict(size=7)))
+    fig_fw2.add_trace(go.Scatter(x=[p["codigo"] for p in trimest], y=[_reference_price(p, subm_sel) for p in trimest],
+        mode='markers', name='Trimestral', marker=dict(size=12, color='#a78bfa', symbol='diamond')))
+    fig_fw2.add_trace(go.Scatter(x=[p["codigo"] for p in anual], y=[_reference_price(p, subm_sel) for p in anual],
+        mode='markers', name='Anual', marker=dict(size=14, color='#fbbf24', symbol='star')))
+    fig_fw2.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(gridcolor='#1e293b', color='#475569'),
+        yaxis=dict(gridcolor='#1e293b', color='#475569', title='R$/MWh'),
+        margin=dict(l=10,r=10,t=30,b=10), height=280,
+        font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
+        legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#94a3b8')),
+        title=dict(text=f'Curva Forward {subm_sel} — nomes dos meses reais', font=dict(size=13, color='#94a3b8')))
+    st.plotly_chart(fig_fw2, use_container_width=True)
+
+# ════════════════════════════════════════════════════════════════════════════════
+# RFQs
+# ════════════════════════════════════════════════════════════════════════════════
+elif pagina == 'rfqs':
+    gdt      = st.session_state['game_datetime']
+    mkt_open = _is_market_open(gdt)
+    st.markdown("# 📨 RFQs — Pedidos de Cotação")
+    st.markdown(f"<p style='color:#475569;font-size:0.85rem;margin-top:-0.5rem;'>Ofertas de contrapartes · Volumes em MW médio · {_market_status_str(gdt)}</p>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    pending  = st.session_state.get('pending_rfqs', [])
+    ativos   = [r for r in pending if r['status']=='pendente']
+    historico= [r for r in pending if r['status']!='pendente']
+
+    if not ativos:
+        st.markdown("<div class='info-box'>📭 Nenhum RFQ pendente. Avance turnos — contrapartes enviam durante 09h–18h.</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"#### {len(ativos)} RFQ(s) Pendente(s)")
+        for rfq in ativos:
+            cor_dev = "#00d4aa" if (rfq['tipo']=="Venda" and rfq['desvio_pct']<0) or (rfq['tipo']=="Compra" and rfq['desvio_pct']>0) else "#fbbf24"
+            exp_em  = rfq['expira_turno'] - st.session_state['turno']
+            st.markdown(f"""<div class='rfq-card'>
+                <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;'>
+                    <span style='color:#e2e8f0;font-weight:700;'>#{rfq['id']} · {rfq['contraparte']}</span>
+                    <span style='color:#334155;font-size:0.65rem;'>Recebido {rfq['timestamp']} · Expira em {exp_em} turno(s)</span>
+                </div>
+                <div style='display:flex;gap:1.5rem;flex-wrap:wrap;'>
+                    <div><span style='color:#475569;'>Tipo: </span><span style='color:#e2e8f0;'>{rfq["tipo"]}</span></div>
+                    <div><span style='color:#475569;'>Produto: </span><span style='color:#e2e8f0;'>{rfq["produto_lab"]}</span></div>
+                    <div><span style='color:#475569;'>Volume: </span><span style='color:#e2e8f0;font-weight:700;'>{rfq["volume_mwm"]:.1f} MWm</span></div>
+                    <div><span style='color:#475569;'>Preço: </span><span style='color:#fbbf24;font-weight:700;'>R$ {rfq["preco"]:.2f}</span></div>
+                    <div><span style='color:#475569;'>Ref: </span><span style='color:#64748b;'>R$ {rfq["referencia"]:.2f}</span></div>
+                    <div><span style='color:#475569;'>Desvio: </span><span style='color:{cor_dev};'>{rfq["desvio_pct"]:+.1f}%</span></div>
+                    <div><span style='color:#475569;'>Submercado: </span><span style='color:#e2e8f0;'>{rfq["submercado"]}</span></div>
+                </div></div>""", unsafe_allow_html=True)
+
+            col_ac, col_rc, col_neg = st.columns(3)
+            with col_ac:
+                if st.button(f"✅ Aceitar #{rfq['id']}", key=f"ac_{rfq['id']}", use_container_width=True):
+                    if not mkt_open:
+                        st.error("Mercado fechado.")
+                    else:
+                        rfq['status'] = 'aceito'
+                        tipo_c = "Compra" if rfq['tipo']=="Venda" else "Venda"
+                        prod_rfq = _get_produto_by_codigo(rfq['produto_cod'], gdt)
+                        if prod_rfq:
+                            _registrar_contrato_negociado(tipo_c, rfq['preco'], rfq['volume_mwm'], prod_rfq, rfq['submercado'], rfq['contraparte'], gdt)
+                            log = st.session_state.get('turn_log',[])
+                            log.append(f'<span class="ts">[{gdt.strftime("%d/%m %H:%M")}]</span> <span class="deal">✅ RFQ #{rfq["id"]} aceito — {tipo_c} {rfq["volume_mwm"]:.1f}MWm {rfq["produto_cod"]} @ R${rfq["preco"]:.2f}</span>')
+                            st.session_state['turn_log'] = log[-50:]
+                            salvar_estado()
+                        st.rerun()
+            with col_rc:
+                if st.button(f"❌ Recusar #{rfq['id']}", key=f"rc_{rfq['id']}", use_container_width=True):
+                    rfq['status'] = 'recusado'; salvar_estado(); st.rerun()
+            with col_neg:
+                st.markdown(f"<div style='font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#334155;padding:0.4rem;'>Contraproposta: ajuste no Livro de Negócios</div>", unsafe_allow_html=True)
+
+    if historico:
+        st.markdown("---")
+        st.markdown("#### 📋 Histórico")
+        for rfq in reversed(historico[-15:]):
+            cor  = "#00d4aa" if rfq['status']=='aceito' else "#fb7185" if rfq['status']=='recusado' else "#475569"
+            icon = "✅" if rfq['status']=='aceito' else "❌" if rfq['status']=='recusado' else "⏳"
+            st.markdown(f"""<div style='display:flex;gap:1rem;padding:6px 0;border-bottom:1px solid #1e293b;font-family:JetBrains Mono,monospace;font-size:0.75rem;'>
+                <span style='color:{cor};'>{icon}</span>
+                <span style='color:#64748b;'>{rfq["timestamp"]}</span>
+                <span style='color:#e2e8f0;'>{rfq["contraparte"]}</span>
+                <span style='color:#94a3b8;'>{rfq["tipo"]} {rfq.get("produto_lab",rfq.get("produto_cod",""))} {rfq["volume_mwm"]:.1f}MWm</span>
+                <span style='color:#fbbf24;'>R$ {rfq["preco"]:.2f}</span>
+                <span style='color:{cor};'>{rfq["status"].upper()}</span>
+            </div>""", unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════════════════════════
 # METEOROLOGIA
@@ -704,381 +1121,183 @@ if pagina == 'mercado':
 elif pagina == 'meteo':
     gdt = st.session_state['game_datetime']
     st.markdown("# 🌦️ Meteorologia & Hidrologia")
-    st.markdown(f"<p style='color:#475569; font-size:0.85rem; margin-top:-0.5rem;'>Condições climáticas · Data do jogo: <b style='color:#00d4aa'>{gdt.strftime('%d/%m/%Y %H:%M')}</b></p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:#475569;font-size:0.85rem;margin-top:-0.5rem;'>Condições climáticas · {gdt.strftime('%d/%m/%Y %H:%M')}</p>", unsafe_allow_html=True)
     st.markdown("---")
-
     meteo = st.session_state['meteo']
     datas_str = meteo['datas']
     fator_meteo, alertas = _impacto_meteo_no_pld(meteo)
-
     if alertas:
-        st.markdown("#### 🔔 Alertas do Sistema")
         for icone, tipo, msg in alertas:
             box_class = "danger-box" if tipo=="danger" else "warn-box" if tipo=="warn" else "info-box"
             st.markdown(f"<div class='{box_class}'>{icone} {msg}</div>", unsafe_allow_html=True)
         st.markdown("")
 
-    st.markdown("#### 📡 Condições Atuais")
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-    res_atual  = meteo['reserv'][-1]; aflu_atual = meteo['afluen'][-1]
-    prec_atual = meteo['precip'][-1]; temp_atual = meteo['temp'][-1]
-    eol_atual  = meteo['eolica'][-1]; sol_atual  = meteo['solar'][-1]
-    res_prev  = meteo['reserv'][-2]  if len(meteo['reserv'])  > 1 else res_atual
-    aflu_prev = meteo['afluen'][-2]  if len(meteo['afluen'])  > 1 else aflu_atual
-    eol_prev  = meteo['eolica'][-2]  if len(meteo['eolica'])  > 1 else eol_atual
-    m1.metric("Reservatório SE/CO", f"{res_atual:.0f}%",  f"{res_atual-res_prev:+.1f}%")
-    m2.metric("Afluência (% MLT)",  f"{aflu_atual:.0f}%", f"{aflu_atual-aflu_prev:+.1f}%")
-    m3.metric("Precipitação",       f"{prec_atual:.0f} mm")
-    m4.metric("Temperatura SE/CO",  f"{temp_atual:.1f}°C")
-    m5.metric("Geração Eólica NE",  f"{eol_atual:.0f}%",  f"{eol_atual-eol_prev:+.1f}%")
-    m6.metric("Geração Solar",      f"{sol_atual:.0f}%")
-
-    cor_fator   = "#00d4aa" if fator_meteo <= 1.0 else "#fbbf24" if fator_meteo <= 1.2 else "#fb7185"
-    label_fator = "Baixa pressão" if fator_meteo <= 1.0 else "Pressão moderada" if fator_meteo <= 1.2 else "Alta pressão"
-    proxima_att = METEO_UPDATE_HOURS - (st.session_state['turno'] % METEO_UPDATE_HOURS)
-    st.markdown(f"""
-    <div style='background:#111827; border:1px solid #1e293b; border-radius:8px;
-                padding:1rem 1.5rem; margin-top:1rem; display:flex; justify-content:space-between; align-items:center;'>
+    m1,m2,m3,m4,m5,m6 = st.columns(6)
+    ra = meteo['reserv'][-1]; aa = meteo['afluen'][-1]
+    pa = meteo['precip'][-1]; ta = meteo['temp'][-1]
+    ea = meteo['eolica'][-1]; sa = meteo['solar'][-1]
+    rp = meteo['reserv'][-2] if len(meteo['reserv'])>1 else ra
+    ap = meteo['afluen'][-2] if len(meteo['afluen'])>1 else aa
+    ep = meteo['eolica'][-2] if len(meteo['eolica'])>1 else ea
+    m1.metric("Reservatório", f"{ra:.0f}%",  f"{ra-rp:+.1f}%")
+    m2.metric("Afluência MLT",f"{aa:.0f}%",  f"{aa-ap:+.1f}%")
+    m3.metric("Precipitação", f"{pa:.0f} mm")
+    m4.metric("Temperatura",  f"{ta:.1f}°C")
+    m5.metric("Eólica NE",    f"{ea:.0f}%",  f"{ea-ep:+.1f}%")
+    m6.metric("Solar",        f"{sa:.0f}%")
+    cor_f = "#00d4aa" if fator_meteo<=1.0 else "#fbbf24" if fator_meteo<=1.2 else "#fb7185"
+    prox  = METEO_UPDATE_HOURS - (turno % METEO_UPDATE_HOURS)
+    st.markdown(f"""<div style='background:#111827;border:1px solid #1e293b;border-radius:8px;padding:1rem 1.5rem;margin-top:1rem;display:flex;justify-content:space-between;align-items:center;'>
         <div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#475569; text-transform:uppercase; letter-spacing:0.1em;'>
-                Fator de Pressão Meteorológica sobre o PLD
-            </div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.82rem; color:#94a3b8; margin-top:2px;'>
-                Reflete o impacto combinado das condições climáticas na tendência do PLD
-            </div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#334155; margin-top:4px;'>
-                Próxima atualização: <b style='color:#475569'>{proxima_att}h</b> de jogo
-            </div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;'>Fator de Pressão Meteorológica sobre o PLD</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#334155;margin-top:4px;'>Próxima atualização: <b style='color:#475569'>{prox}h</b></div>
         </div>
         <div style='text-align:right;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:2rem; font-weight:700; color:{cor_fator};'>{fator_meteo:.2f}×</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:{cor_fator};'>{label_fator}</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+            <div style='font-family:JetBrains Mono,monospace;font-size:2rem;font-weight:700;color:{cor_f};'>{fator_meteo:.2f}×</div>
+        </div></div>""", unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown("#### 📈 Histórico (série completa)")
-
-    tab1, tab2, tab3 = st.tabs(["💧 Hidrologia", "🌡️ Clima", "⚡ Renováveis"])
-
-    def _layout_fig():
-        return dict(
-            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+    def _lf():
+        return dict(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
             xaxis=dict(gridcolor='#1e293b', color='#475569'),
             yaxis=dict(gridcolor='#1e293b', color='#475569'),
-            margin=dict(l=10, r=10, t=30, b=10), height=260,
+            margin=dict(l=10,r=10,t=30,b=10), height=260,
             font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
-            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#94a3b8'))
-        )
-
-    with tab1:
-        fig_hid = go.Figure()
-        fig_hid.add_trace(go.Scatter(
-            x=datas_str, y=meteo['reserv'], mode='lines', name='Reservatório SE/CO (%)',
-            line=dict(color='#60a5fa', width=2), fill='tozeroy', fillcolor='rgba(96,165,250,0.08)',
-            hovertemplate='%{x}<br>Reservatório: %{y:.1f}%<extra></extra>'
-        ))
-        fig_hid.add_hline(y=40, line_color='#fbbf24', line_dash='dash', annotation_text='Atenção (40%)', annotation_font_color='#fbbf24')
-        fig_hid.add_hline(y=20, line_color='#fb7185', line_dash='dash', annotation_text='Crítico (20%)',  annotation_font_color='#fb7185')
-        lay = _layout_fig(); lay['yaxis']['range'] = [0,105]; lay['yaxis']['title'] = '%'
-        fig_hid.update_layout(**lay)
-
-        fig_aflu = go.Figure()
-        fig_aflu.add_trace(go.Bar(
-            x=datas_str, y=meteo['afluen'], name='Afluência (% MLT)',
-            marker_color=['#fb7185' if v<50 else '#fbbf24' if v<80 else '#00d4aa' for v in meteo['afluen']],
-            hovertemplate='%{x}<br>Afluência: %{y:.1f}% MLT<extra></extra>'
-        ))
-        fig_aflu.add_hline(y=100, line_color='#475569', line_dash='dash', annotation_text='MLT (100%)', annotation_font_color='#475569')
-        lay2 = _layout_fig(); lay2['yaxis']['title'] = '% MLT'
-        fig_aflu.update_layout(**lay2)
-
-        col_h1, col_h2 = st.columns(2)
-        with col_h1:
-            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Nível dos Reservatórios</div>", unsafe_allow_html=True)
-            st.plotly_chart(fig_hid, use_container_width=True)
-        with col_h2:
-            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Afluência Natural (% da MLT)</div>", unsafe_allow_html=True)
-            st.plotly_chart(fig_aflu, use_container_width=True)
-
-        st.markdown("<div class='info-box'>💡 <b>Como interpretar:</b> Reservatório abaixo de 40% e afluência abaixo da MLT (100%) são os principais sinais de alerta para alta do PLD.</div>", unsafe_allow_html=True)
-
-    with tab2:
-        fig_prec = go.Figure()
-        fig_prec.add_trace(go.Bar(
-            x=datas_str, y=meteo['precip'], name='Precipitação (mm)',
-            marker_color='rgba(96,165,250,0.7)',
-            hovertemplate='%{x}<br>Precipitação: %{y:.0f} mm<extra></extra>'
-        ))
-        lay3 = _layout_fig(); lay3['yaxis']['title'] = 'mm/mês'
-        fig_prec.update_layout(**lay3)
-
-        fig_temp = go.Figure()
-        fig_temp.add_trace(go.Scatter(
-            x=datas_str, y=meteo['temp'], mode='lines+markers',
-            line=dict(color='#f59e0b', width=2), marker=dict(size=4, color='#f59e0b'),
-            hovertemplate='%{x}<br>Temperatura: %{y:.1f}°C<extra></extra>'
-        ))
-        fig_temp.add_hline(y=30, line_color='#fb7185', line_dash='dash', annotation_text='Calor extremo (30°C)', annotation_font_color='#fb7185')
-        lay4 = _layout_fig(); lay4['yaxis']['title'] = '°C'
-        fig_temp.update_layout(**lay4)
-
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Precipitação SE/CO</div>", unsafe_allow_html=True)
-            st.plotly_chart(fig_prec, use_container_width=True)
-        with col_c2:
-            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Temperatura Média SE/CO</div>", unsafe_allow_html=True)
-            st.plotly_chart(fig_temp, use_container_width=True)
-
-        st.markdown("<div class='info-box'>💡 <b>Como interpretar:</b> Precipitação baixa por vários meses consecutivos é sinal de risco hídrico. Temperaturas acima de 30°C aumentam a demanda de climatização.</div>", unsafe_allow_html=True)
-
-    with tab3:
-        fig_eol = go.Figure()
-        fig_eol.add_trace(go.Scatter(
-            x=datas_str, y=meteo['eolica'], mode='lines', name='Eólica NE (%)',
-            line=dict(color='#a78bfa', width=2), fill='tozeroy', fillcolor='rgba(167,139,250,0.08)',
-            hovertemplate='%{x}<br>Eólica: %{y:.1f}%<extra></extra>'
-        ))
-        lay5 = _layout_fig(); lay5['yaxis']['range'] = [0,105]; lay5['yaxis']['title'] = '% capacidade'
-        fig_eol.update_layout(**lay5)
-
-        fig_sol = go.Figure()
-        fig_sol.add_trace(go.Scatter(
-            x=datas_str, y=meteo['solar'], mode='lines', name='Solar (%)',
-            line=dict(color='#f59e0b', width=2), fill='tozeroy', fillcolor='rgba(245,158,11,0.08)',
-            hovertemplate='%{x}<br>Solar: %{y:.1f}%<extra></extra>'
-        ))
-        lay6 = _layout_fig(); lay6['yaxis']['range'] = [0,105]; lay6['yaxis']['title'] = '% capacidade'
-        fig_sol.update_layout(**lay6)
-
-        col_r1, col_r2 = st.columns(2)
-        with col_r1:
-            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Fator de Capacidade Eólica (NE)</div>", unsafe_allow_html=True)
-            st.plotly_chart(fig_eol, use_container_width=True)
-        with col_r2:
-            st.markdown("<div style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase; margin-bottom:4px;'>Fator de Capacidade Solar</div>", unsafe_allow_html=True)
-            st.plotly_chart(fig_sol, use_container_width=True)
-
-        st.markdown("<div class='info-box'>💡 <b>Como interpretar:</b> Alta geração eólica e solar reduz a necessidade de despacho termelétrico, aliviando o CMO e pressionando o PLD para baixo.</div>", unsafe_allow_html=True)
+            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#94a3b8')))
 
     st.markdown("---")
-    st.markdown("#### 🔗 Matriz de Impacto no PLD")
-    st.markdown("""
-    <div style='overflow-x:auto;'>
-    <table style='width:100%; border-collapse:collapse; font-family:JetBrains Mono,monospace; font-size:0.8rem;'>
-      <thead>
-        <tr style='background:#111827; color:#64748b; text-transform:uppercase; font-size:0.65rem; letter-spacing:0.05em;'>
-          <th style='padding:8px 12px; text-align:left; border-bottom:1px solid #1e293b;'>Variável</th>
-          <th style='padding:8px 12px; text-align:center; border-bottom:1px solid #1e293b;'>Quando SOBE</th>
-          <th style='padding:8px 12px; text-align:center; border-bottom:1px solid #1e293b;'>Impacto no PLD</th>
-          <th style='padding:8px 12px; text-align:center; border-bottom:1px solid #1e293b;'>Quando CAI</th>
-          <th style='padding:8px 12px; text-align:center; border-bottom:1px solid #1e293b;'>Impacto no PLD</th>
-          <th style='padding:8px 12px; text-align:left; border-bottom:1px solid #1e293b;'>Intensidade</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr style='border-bottom:1px solid #1e293b;'>
-          <td style='padding:8px 12px; color:#e2e8f0;'>💧 Reservatório</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Nível sobe</td>
-          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Nível cai</td>
-          <td style='padding:8px 12px; text-align:center; color:#fb7185; font-weight:700;'>↑ Sobe forte</td>
-          <td style='padding:8px 12px; color:#f59e0b;'>★★★★★ Crítica</td>
-        </tr>
-        <tr style='border-bottom:1px solid #1e293b; background:rgba(255,255,255,0.01);'>
-          <td style='padding:8px 12px; color:#e2e8f0;'>🌧️ Afluência</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Acima MLT</td>
-          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Abaixo MLT</td>
-          <td style='padding:8px 12px; text-align:center; color:#fb7185; font-weight:700;'>↑ Sobe forte</td>
-          <td style='padding:8px 12px; color:#f59e0b;'>★★★★★ Crítica</td>
-        </tr>
-        <tr style='border-bottom:1px solid #1e293b;'>
-          <td style='padding:8px 12px; color:#e2e8f0;'>🌡️ Temperatura</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Onda de calor</td>
-          <td style='padding:8px 12px; text-align:center; color:#fb7185; font-weight:700;'>↑ Sobe</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Temperatura amena</td>
-          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Leve baixa</td>
-          <td style='padding:8px 12px; color:#94a3b8;'>★★★☆☆ Moderada</td>
-        </tr>
-        <tr style='border-bottom:1px solid #1e293b; background:rgba(255,255,255,0.01);'>
-          <td style='padding:8px 12px; color:#e2e8f0;'>💨 Eólica NE</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Vento forte</td>
-          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Vento fraco</td>
-          <td style='padding:8px 12px; text-align:center; color:#fbbf24; font-weight:700;'>↑ Leve alta</td>
-          <td style='padding:8px 12px; color:#94a3b8;'>★★★☆☆ Moderada</td>
-        </tr>
-        <tr style='border-bottom:1px solid #1e293b;'>
-          <td style='padding:8px 12px; color:#e2e8f0;'>☀️ Solar</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Alta irradiação</td>
-          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa leve</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Dias nublados</td>
-          <td style='padding:8px 12px; text-align:center; color:#fbbf24; font-weight:700;'>↑ Leve alta</td>
-          <td style='padding:8px 12px; color:#94a3b8;'>★★☆☆☆ Baixa</td>
-        </tr>
-        <tr>
-          <td style='padding:8px 12px; color:#e2e8f0;'>🌧️ Precipitação</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Chuvas fortes</td>
-          <td style='padding:8px 12px; text-align:center; color:#00d4aa; font-weight:700;'>↓ Baixa (futuro)</td>
-          <td style='padding:8px 12px; text-align:center; color:#94a3b8;'>Seca prolongada</td>
-          <td style='padding:8px 12px; text-align:center; color:#fb7185; font-weight:700;'>↑ Sobe (futuro)</td>
-          <td style='padding:8px 12px; color:#fbbf24;'>★★★★☆ Alta</td>
-        </tr>
-      </tbody>
-    </table>
-    </div>
-    """, unsafe_allow_html=True)
+    tab1, tab2, tab3 = st.tabs(["💧 Hidrologia", "🌡️ Clima", "⚡ Renováveis"])
+    with tab1:
+        c1, c2 = st.columns(2)
+        with c1:
+            f = go.Figure(); f.add_trace(go.Scatter(x=datas_str,y=meteo['reserv'],mode='lines',line=dict(color='#60a5fa',width=2),fill='tozeroy',fillcolor='rgba(96,165,250,0.08)'))
+            f.add_hline(y=40,line_color='#fbbf24',line_dash='dash'); f.add_hline(y=20,line_color='#fb7185',line_dash='dash')
+            l=_lf(); l['yaxis']['range']=[0,105]; l['yaxis']['title']='%'; f.update_layout(**l)
+            st.plotly_chart(f, use_container_width=True)
+        with c2:
+            f2=go.Figure(); f2.add_trace(go.Bar(x=datas_str,y=meteo['afluen'],marker_color=['#fb7185' if v<50 else '#fbbf24' if v<80 else '#00d4aa' for v in meteo['afluen']]))
+            f2.add_hline(y=100,line_color='#475569',line_dash='dash'); l2=_lf(); l2['yaxis']['title']='% MLT'; f2.update_layout(**l2)
+            st.plotly_chart(f2, use_container_width=True)
+    with tab2:
+        c1, c2 = st.columns(2)
+        with c1:
+            f=go.Figure(); f.add_trace(go.Bar(x=datas_str,y=meteo['precip'],marker_color='rgba(96,165,250,0.7)'))
+            l=_lf(); l['yaxis']['title']='mm/mês'; f.update_layout(**l)
+            st.plotly_chart(f, use_container_width=True)
+        with c2:
+            f=go.Figure(); f.add_trace(go.Scatter(x=datas_str,y=meteo['temp'],mode='lines+markers',line=dict(color='#f59e0b',width=2)))
+            f.add_hline(y=30,line_color='#fb7185',line_dash='dash'); l=_lf(); l['yaxis']['title']='°C'; f.update_layout(**l)
+            st.plotly_chart(f, use_container_width=True)
+    with tab3:
+        c1, c2 = st.columns(2)
+        with c1:
+            f=go.Figure(); f.add_trace(go.Scatter(x=datas_str,y=meteo['eolica'],mode='lines',line=dict(color='#a78bfa',width=2),fill='tozeroy',fillcolor='rgba(167,139,250,0.08)'))
+            l=_lf(); l['yaxis']['range']=[0,105]; l['yaxis']['title']='% cap.'; f.update_layout(**l)
+            st.plotly_chart(f, use_container_width=True)
+        with c2:
+            f=go.Figure(); f.add_trace(go.Scatter(x=datas_str,y=meteo['solar'],mode='lines',line=dict(color='#f59e0b',width=2),fill='tozeroy',fillcolor='rgba(245,158,11,0.08)'))
+            l=_lf(); l['yaxis']['range']=[0,105]; l['yaxis']['title']='% cap.'; f.update_layout(**l)
+            st.plotly_chart(f, use_container_width=True)
 
 # ════════════════════════════════════════════════════════════════════════════════
-# NOVO CONTRATO
+# NOVO CONTRATO (OTC manual)
 # ════════════════════════════════════════════════════════════════════════════════
 elif pagina == 'novo_contrato':
     gdt = st.session_state['game_datetime']
-    st.markdown("# 📋 Novo Contrato")
-    st.markdown(f"<p style='color:#475569; font-size:0.85rem; margin-top:-0.5rem;'>Monte e registre um contrato bilateral · Data do jogo: <b style='color:#00d4aa'>{gdt.strftime('%d/%m/%Y %H:%M')}</b></p>", unsafe_allow_html=True)
+    st.markdown("# 📋 Novo Contrato OTC")
+    st.markdown(f"<p style='color:#475569;font-size:0.85rem;margin-top:-0.5rem;'>Contrato bilateral manual · {gdt.strftime('%d/%m/%Y %H:%M')}</p>", unsafe_allow_html=True)
     st.markdown("---")
+    st.markdown("<div class='info-box'>💡 Para negociar via livro ou RFQ use as páginas correspondentes. Esta página é para contratos OTC bilaterais manuais.</div>", unsafe_allow_html=True)
+    fm, _ = _impacto_meteo_no_pld(st.session_state['meteo'])
+    if fm > 1.15:
+        st.markdown(f"<div class='warn-box'>⚠️ Fator meteo {fm:.2f}× — pressão de alta no PLD.</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='info-box'>💡 <b>Como funciona:</b> Um contrato bilateral é um acordo entre comprador e vendedor com preço, volume e período definidos. O simulador calculará seu PnL comparando o preço acordado com o PLD atual.</div>", unsafe_allow_html=True)
+    # Produtos com nome dos meses
+    produtos_disp = _gerar_produtos(gdt)
+    prod_opcoes   = {p["codigo"]: f"{p['codigo']} — {p['label']}" for p in produtos_disp}
 
-    fator_meteo, alertas = _impacto_meteo_no_pld(st.session_state['meteo'])
-    if fator_meteo > 1.15:
-        st.markdown(f"<div class='warn-box'>⚠️ <b>Atenção:</b> Condições meteorológicas indicam pressão de alta no PLD (fator {fator_meteo:.2f}×). Considere o impacto ao definir o preço do contrato.</div>", unsafe_allow_html=True)
-    elif fator_meteo < 0.95:
-        st.markdown(f"<div class='info-box'>✅ <b>Condições favoráveis:</b> Fatores climáticos sugerem pressão de baixa no PLD (fator {fator_meteo:.2f}×). Bom momento para analisar contratos de venda.</div>", unsafe_allow_html=True)
-
-    with st.form("form_contrato"):
-        st.markdown("#### Identificação")
+    with st.form("form_contrato_otc"):
         col1, col2 = st.columns(2)
-        with col1: nome_contrato = st.text_input("Nome / Referência do Contrato", placeholder="ex: CONTRATO-001")
-        with col2: contraparte   = st.text_input("Contraparte", placeholder="ex: Geradora Solar ABC")
+        with col1: nome_c  = st.text_input("Nome / Referência", placeholder="ex: CONTRATO-001")
+        with col2: cp_nome = st.text_input("Contraparte", placeholder="ex: Cemig GT")
 
-        st.markdown("#### Operação")
         col3, col4, col5 = st.columns(3)
-        with col3: tipo_op      = st.selectbox("Tipo de Operação", ["Compra", "Venda"])
-        with col4: submercado   = st.selectbox("Submercado", list(SUBM.keys()))
-        with col5: tipo_energia = st.selectbox("Tipo de Energia", TIPOS_ENERGIA)
+        with col3: tipo_op  = st.selectbox("Tipo", ["Compra","Venda"])
+        with col4: subm_otc = st.selectbox("Submercado", list(SUBM.keys()))
+        with col5: tp_energ = st.selectbox("Energia", TIPOS_ENERGIA)
 
-        st.markdown("#### Preço e Volume")
         col6, col7, col8 = st.columns(3)
-        with col6: preco     = st.number_input("Preço (R$/MWh)", min_value=0.01, value=float(round(st.session_state['pld_atual'],0)), step=1.0)
-        with col7: volume_mw = st.number_input("Volume (MW médio)", min_value=0.1, value=1.0, step=0.5)
-        with col8: indice    = st.selectbox("Índice de Reajuste", INDICES)
+        with col6: preco_otc = st.number_input("Preço (R$/MWh)", min_value=0.01, value=float(round(st.session_state['pld_atual'],0)), step=1.0)
+        with col7:
+            vol_otc = st.number_input("Volume (MW médio)", min_value=0.1, value=1.0, step=0.5,
+                                       help="MW médio mensal — a energia total depende do prazo do produto")
+        with col8: indice = st.selectbox("Índice", INDICES)
 
-        st.markdown("#### Vigência")
+        prod_sel_cod = st.selectbox("Produto", list(prod_opcoes.keys()), format_func=lambda x: prod_opcoes[x])
+
         col9, col10 = st.columns(2)
-        with col9:  data_inicio = st.date_input("Data de Início", value=gdt.date().replace(day=1))
-        with col10: data_fim    = st.date_input("Data de Fim",    value=gdt.date().replace(day=1) + relativedelta(months=11))
-
-        st.markdown("#### Gross-up")
-        col11, col12 = st.columns(2)
-        with col11: gross_up = st.checkbox("Aplicar Gross-up de PIS/COFINS (9,25%)", value=False)
-        with col12: flag_pc  = st.checkbox("Marcar flag P/C na boleta", value=False)
-
-        obs = st.text_area("Observações", placeholder="Notas adicionais...", height=80)
+        with col9:  gross_up = st.checkbox("Gross-up PIS/COFINS (9,25%)", value=False)
+        with col10: flag_pc  = st.checkbox("Flag P/C na boleta", value=False)
+        obs = st.text_area("Observações", height=60)
         submitted = st.form_submit_button("✅  REGISTRAR CONTRATO", type="primary", use_container_width=True)
 
     if submitted:
-        if not nome_contrato:
-            st.error("⚠️ Informe o nome do contrato.")
-        elif data_fim <= data_inicio:
-            st.error("⚠️ A data de fim deve ser posterior à data de início.")
+        if not nome_c:
+            st.error("⚠️ Informe o nome.")
         else:
-            horas     = int((data_fim - data_inicio).days * 24)
-            preco_adj = preco * 1.0925 if gross_up else preco
-            novo = {
-                'id': len(st.session_state['contratos']) + 1,
-                'nome': nome_contrato, 'contraparte': contraparte,
-                'tipo': tipo_op, 'submercado': submercado, 'tipo_energia': tipo_energia,
-                'preco': preco_adj, 'preco_orig': preco, 'volume_mw': volume_mw,
-                'indice': indice, 'data_inicio': data_inicio, 'data_fim': data_fim,
-                'horas': horas, 'gross_up': gross_up, 'flag_pc': flag_pc,
-                'obs': obs, 'pnl_atual': 0.0, 'criado_em': datetime.now(),
-            }
-            _recalc_pnl(novo)
-            st.session_state['contratos'].append(novo)
-            salvar_estado()
-            vol_total_mwh = volume_mw * horas
-            receita_bruta = preco_adj * vol_total_mwh
-            st.success(f"✅ Contrato **{nome_contrato}** registrado!")
-            st.markdown(f"""
-            <div style='display:flex; gap:1rem; margin-top:0.5rem;'>
-                <div class='card' style='flex:1;'>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem; color:#475569; text-transform:uppercase;'>Volume Total</div>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:1.2rem; font-weight:700; color:#e2e8f0;'>{vol_total_mwh:,.0f} MWh</div>
-                </div>
-                <div class='card' style='flex:1;'>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem; color:#475569; text-transform:uppercase;'>Receita Bruta</div>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:1.2rem; font-weight:700; color:#e2e8f0;'>R$ {receita_bruta:,.2f}</div>
-                </div>
-                <div class='card' style='flex:1;'>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem; color:#475569; text-transform:uppercase;'>PnL vs PLD atual</div>
-                    <div style='font-family:JetBrains Mono,monospace; font-size:1.2rem; font-weight:700; color:{_cor_pnl(novo["pnl_atual"])};'>{_fmt_brl(novo["pnl_atual"])}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            prod_otc = _get_produto_by_codigo(prod_sel_cod, gdt)
+            if prod_otc:
+                preco_adj = preco_otc * 1.0925 if gross_up else preco_otc
+                horas     = prod_otc["horas_mes"]
+                novo = {
+                    'id': len(st.session_state['contratos'])+1,
+                    'nome': nome_c, 'contraparte': cp_nome,
+                    'tipo': tipo_op, 'submercado': subm_otc, 'tipo_energia': tp_energ,
+                    'preco': preco_adj, 'volume_mwm': vol_otc, 'indice': indice,
+                    'data_inicio': prod_otc['inicio'], 'data_fim': prod_otc['fim'],
+                    'horas': horas, 'gross_up': gross_up, 'flag_pc': flag_pc,
+                    'obs': obs, 'pnl_atual': 0.0, 'criado_em': datetime.now(),
+                    'produto_cod': prod_sel_cod, 'produto_lab': prod_otc['label'],
+                }
+                _recalc_pnl(novo)
+                st.session_state['contratos'].append(novo)
+                salvar_estado()
+                energia_total = vol_otc * horas
+                st.success(f"✅ **{nome_c}** registrado! {vol_otc:.1f} MWm · {energia_total:,.0f} MWh total · R$ {preco_adj:.2f}/MWh")
 
 # ════════════════════════════════════════════════════════════════════════════════
 # PORTFÓLIO
 # ════════════════════════════════════════════════════════════════════════════════
 elif pagina == 'portfolio':
     st.markdown("# 💼 Meu Portfólio")
-    st.markdown("<p style='color:#475569; font-size:0.85rem; margin-top:-0.5rem;'>Todos os contratos registrados</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#475569;font-size:0.85rem;margin-top:-0.5rem;'>Volumes em MW médio mensal (MWm)</p>", unsafe_allow_html=True)
     st.markdown("---")
-
     if not st.session_state['contratos']:
-        st.markdown("<div class='warn-box'>⚠️ Nenhum contrato registrado ainda. Acesse <b>Novo Contrato</b> para começar a operar.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warn-box'>⚠️ Nenhum contrato. Use Livro, RFQs ou Novo Contrato OTC.</div>", unsafe_allow_html=True)
     else:
-        contratos  = st.session_state['contratos']
-        pos_compra = sum(c['volume_mw'] for c in contratos if c['tipo']=='Compra')
-        pos_venda  = sum(c['volume_mw'] for c in contratos if c['tipo']=='Venda')
-        pos_liq    = pos_compra - pos_venda
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Posição Comprada", f"{pos_compra:.1f} MW")
-        m2.metric("Posição Vendida",  f"{pos_venda:.1f} MW")
-        m3.metric("Posição Líquida",  f"{pos_liq:+.1f} MW", delta="Comprado" if pos_liq>0 else "Vendido" if pos_liq<0 else "Zerado")
+        contratos = st.session_state['contratos']
+        pos_c = sum(c.get('volume_mwm',c.get('volume_mw',0)) for c in contratos if c['tipo']=='Compra')
+        pos_v = sum(c.get('volume_mwm',c.get('volume_mw',0)) for c in contratos if c['tipo']=='Venda')
+        m1,m2,m3,m4 = st.columns(4)
+        m1.metric("Posição Comprada", f"{pos_c:.1f} MWm")
+        m2.metric("Posição Vendida",  f"{pos_v:.1f} MWm")
+        m3.metric("Posição Líquida",  f"{pos_c-pos_v:+.1f} MWm")
         m4.metric("Contratos Ativos", len(contratos))
         st.markdown("")
-
         for c in contratos:
-            tag_html = f"<span class='tag-{'compra' if c['tipo']=='Compra' else 'venda'}'>{c['tipo'].upper()}</span>"
             pnl_cor  = _cor_pnl(c['pnl_atual'])
-            with st.expander(f"#{c['id']} — {c['nome']}  |  {c['volume_mw']} MW  |  R$ {c['preco']:.2f}/MWh", expanded=False):
+            vol_exib = c.get('volume_mwm', c.get('volume_mw',0))
+            prod_lab = c.get('produto_lab', c.get('produto_cod', 'OTC'))
+            with st.expander(f"#{c['id']} [{prod_lab}] — {c['nome']} | {vol_exib:.1f} MWm | R$ {c['preco']:.2f}/MWh"):
                 col_a, col_b, col_c = st.columns(3)
-                with col_a:
-                    st.markdown(f"""<div style='font-family:JetBrains Mono,monospace; font-size:0.8rem; line-height:2;'>
-                        <b style='color:#64748b;'>Tipo:</b> {tag_html}<br>
-                        <b style='color:#64748b;'>Contraparte:</b> <span style='color:#e2e8f0;'>{c['contraparte'] or '—'}</span><br>
-                        <b style='color:#64748b;'>Submercado:</b> <span style='color:#e2e8f0;'>{c['submercado']}</span><br>
-                        <b style='color:#64748b;'>Energia:</b> <span style='color:#e2e8f0;'>{c['tipo_energia']}</span>
-                    </div>""", unsafe_allow_html=True)
-                with col_b:
-                    st.markdown(f"""<div style='font-family:JetBrains Mono,monospace; font-size:0.8rem; line-height:2;'>
-                        <b style='color:#64748b;'>Preço:</b> <span style='color:#e2e8f0;'>R$ {c['preco']:.2f}/MWh</span><br>
-                        <b style='color:#64748b;'>Volume:</b> <span style='color:#e2e8f0;'>{c['volume_mw']} MW</span><br>
-                        <b style='color:#64748b;'>Horas:</b> <span style='color:#e2e8f0;'>{c['horas']:,} h</span><br>
-                        <b style='color:#64748b;'>Índice:</b> <span style='color:#e2e8f0;'>{c['indice']}</span>
-                    </div>""", unsafe_allow_html=True)
-                with col_c:
-                    st.markdown(f"""<div style='font-family:JetBrains Mono,monospace; font-size:0.8rem; line-height:2;'>
-                        <b style='color:#64748b;'>Início:</b> <span style='color:#e2e8f0;'>{c['data_inicio']}</span><br>
-                        <b style='color:#64748b;'>Fim:</b> <span style='color:#e2e8f0;'>{c['data_fim']}</span><br>
-                        <b style='color:#64748b;'>Gross-up:</b> <span style='color:#e2e8f0;'>{'✓ 9,25%' if c['gross_up'] else '—'}</span><br>
-                        <b style='color:#64748b;'>Flag P/C:</b> <span style='color:#e2e8f0;'>{'✓' if c['flag_pc'] else '—'}</span>
-                    </div>""", unsafe_allow_html=True)
-                st.markdown(f"""
-                <div style='margin-top:0.75rem; padding:0.75rem 1rem; background:#0d1117;
-                            border-radius:6px; display:flex; justify-content:space-between; align-items:center;'>
-                    <span style='font-family:JetBrains Mono,monospace; font-size:0.7rem; color:#475569; text-transform:uppercase;'>PnL vs PLD Atual</span>
-                    <span style='font-family:JetBrains Mono,monospace; font-size:1.1rem; font-weight:700; color:{pnl_cor};'>{_fmt_brl(c['pnl_atual'])}</span>
+                with col_a: st.markdown(f"**Tipo:** {c['tipo']} | **Contraparte:** {c.get('contraparte','—')}<br>**Submercado:** {c['submercado']}", unsafe_allow_html=True)
+                with col_b: st.markdown(f"**Preço:** R$ {c['preco']:.2f}/MWh<br>**Volume:** {vol_exib:.1f} MWm | **Horas:** {c.get('horas',720):,} h<br>**Energia:** {vol_exib*c.get('horas',720):,.0f} MWh", unsafe_allow_html=True)
+                with col_c: st.markdown(f"**Início:** {c['data_inicio']} | **Fim:** {c['data_fim']}", unsafe_allow_html=True)
+                st.markdown(f"""<div style='margin-top:0.75rem;padding:0.75rem 1rem;background:#0d1117;border-radius:6px;display:flex;justify-content:space-between;'>
+                    <span style='font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#475569;text-transform:uppercase;'>PnL vs PLD Mensal Atual</span>
+                    <span style='font-family:JetBrains Mono,monospace;font-size:1.1rem;font-weight:700;color:{pnl_cor};'>{_fmt_brl(c['pnl_atual'])}</span>
                 </div>""", unsafe_allow_html=True)
-                if c['obs']:
-                    st.markdown(f"<div class='info-box'>📝 {c['obs']}</div>", unsafe_allow_html=True)
-                if st.button(f"🗑️ Remover contrato #{c['id']}", key=f"del_{c['id']}"):
-                    st.session_state['contratos'] = [x for x in st.session_state['contratos'] if x['id'] != c['id']]
+                if st.button(f"🗑️ Remover #{c['id']}", key=f"del_{c['id']}"):
+                    st.session_state['contratos'] = [x for x in st.session_state['contratos'] if x['id']!=c['id']]
                     salvar_estado(); st.rerun()
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -1086,219 +1305,180 @@ elif pagina == 'portfolio':
 # ════════════════════════════════════════════════════════════════════════════════
 elif pagina == 'pnl':
     st.markdown("# 💰 PnL & Resultado")
-    st.markdown("<p style='color:#475569; font-size:0.85rem; margin-top:-0.5rem;'>Análise de resultado do portfólio</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#475569;font-size:0.85rem;margin-top:-0.5rem;'>Mark to Market vs PLD mensal</p>", unsafe_allow_html=True)
     st.markdown("---")
-
     if not st.session_state['contratos']:
-        st.markdown("<div class='warn-box'>⚠️ Nenhum contrato registrado ainda.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warn-box'>⚠️ Nenhum contrato registrado.</div>", unsafe_allow_html=True)
     else:
-        contratos = st.session_state['contratos']
-        pld       = st.session_state['pld_atual']
+        contratos   = st.session_state['contratos']
+        pld         = st.session_state['pld_atual']
         pnl_total   = sum(c['pnl_atual'] for c in contratos)
         pnl_compras = sum(c['pnl_atual'] for c in contratos if c['tipo']=='Compra')
         pnl_vendas  = sum(c['pnl_atual'] for c in contratos if c['tipo']=='Venda')
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("PnL Total",   _fmt_brl(pnl_total),   delta=f"{'▲' if pnl_total>=0 else '▼'} vs PLD R${pld:.2f}")
+        m1,m2,m3 = st.columns(3)
+        m1.metric("PnL Total",   _fmt_brl(pnl_total))
         m2.metric("PnL Compras", _fmt_brl(pnl_compras))
         m3.metric("PnL Vendas",  _fmt_brl(pnl_vendas))
-        st.markdown("")
 
         nomes = [c['nome'] for c in contratos]
         pnls  = [c['pnl_atual'] for c in contratos]
-        cores = ['#00d4aa' if v>=0 else '#fb7185' for v in pnls]
-
-        fig_bar = go.Figure(go.Bar(
-            x=nomes, y=pnls, marker_color=cores,
+        fig_b = go.Figure(go.Bar(x=nomes, y=pnls, marker_color=['#00d4aa' if v>=0 else '#fb7185' for v in pnls],
             text=[_fmt_brl(v) for v in pnls], textposition='outside',
-            textfont=dict(family='JetBrains Mono', size=11),
-            hovertemplate='%{x}<br>PnL: R$ %{y:,.2f}<extra></extra>'
-        ))
-        fig_bar.add_shape(type='line', x0=-0.5, x1=len(nomes)-0.5, y0=0, y1=0, line=dict(color='#475569', width=1, dash='dash'))
-        fig_bar.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            textfont=dict(family='JetBrains Mono', size=10)))
+        fig_b.add_shape(type='line', x0=-0.5, x1=len(nomes)-0.5, y0=0, y1=0, line=dict(color='#475569',width=1,dash='dash'))
+        fig_b.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
             xaxis=dict(gridcolor='#1e293b', color='#475569'),
             yaxis=dict(gridcolor='#1e293b', color='#475569', title='PnL (R$)'),
-            margin=dict(l=10, r=10, t=40, b=10), height=320,
+            margin=dict(l=10,r=10,t=40,b=10), height=320,
             font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
-            title=dict(text='PnL por Contrato vs PLD Atual', font=dict(size=13, color='#94a3b8'))
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
+            title=dict(text='PnL por Contrato vs PLD Mensal Atual', font=dict(size=13, color='#94a3b8')))
+        st.plotly_chart(fig_b, use_container_width=True)
 
         st.markdown("---")
         st.markdown("#### 🔮 Simulador de Cenário")
-        st.markdown("<div class='info-box'>Arraste o PLD hipotético para ver como seu portfólio se comportaria em diferentes cenários.</div>", unsafe_allow_html=True)
-
-        pld_sim = st.slider("PLD Hipotético (R$/MWh)", min_value=30.0, max_value=500.0, value=float(round(pld,0)), step=5.0)
-        pnl_sim_list = []
+        pld_sim = st.slider("PLD Hipotético (R$/MWh)", 30.0, 500.0, float(round(pld,0)), 5.0)
+        pnl_sim = []
         for c in contratos:
-            vol = c['volume_mw'] * c['horas']
-            pnl_sim_list.append((pld_sim - c['preco'])*vol if c['tipo']=='Compra' else (c['preco']-pld_sim)*vol)
+            vol = c.get('volume_mwm', c.get('volume_mw',1))
+            h   = c.get('horas', 720)
+            pnl_sim.append((pld_sim - c['preco'])*vol*h if c['tipo']=='Compra' else (c['preco']-pld_sim)*vol*h)
+        pnl_sim_tot = sum(pnl_sim)
+        sc1,sc2,sc3 = st.columns(3)
+        sc1.metric("PLD Hipotético",    f"R$ {pld_sim:.2f}", f"{pld_sim-pld:+.2f}")
+        sc2.metric("PnL no Cenário",    _fmt_brl(pnl_sim_tot))
+        sc3.metric("Variação vs Atual", _fmt_brl(pnl_sim_tot - pnl_total))
 
-        pnl_sim_total = sum(pnl_sim_list)
-        delta_cenario = pnl_sim_total - pnl_total
-
-        sc1, sc2, sc3 = st.columns(3)
-        sc1.metric("PLD Hipotético",    f"R$ {pld_sim:.2f}/MWh", f"{pld_sim-pld:+.2f} vs atual")
-        sc2.metric("PnL no Cenário",    _fmt_brl(pnl_sim_total))
-        sc3.metric("Variação vs Atual", _fmt_brl(delta_cenario))
-
-        pld_range = np.linspace(30, 500, 200)
-        pnl_range = []
-        for p in pld_range:
-            s = sum((p-c['preco'])*c['volume_mw']*c['horas'] if c['tipo']=='Compra' else (c['preco']-p)*c['volume_mw']*c['horas'] for c in contratos)
-            pnl_range.append(s)
-
-        fig_sens = go.Figure()
-        fig_sens.add_trace(go.Scatter(x=pld_range, y=pnl_range, mode='lines', line=dict(color='#00d4aa', width=2),
-            fill='tozeroy', fillcolor='rgba(0,212,170,0.05)', name='PnL Portfólio',
+        pld_r = np.linspace(30, 500, 200)
+        pnl_r = []
+        for p in pld_r:
+            s = sum((p-c['preco'])*c.get('volume_mwm',c.get('volume_mw',1))*c.get('horas',720) if c['tipo']=='Compra'
+                    else (c['preco']-p)*c.get('volume_mwm',c.get('volume_mw',1))*c.get('horas',720) for c in contratos)
+            pnl_r.append(s)
+        fig_s = go.Figure()
+        fig_s.add_trace(go.Scatter(x=pld_r, y=pnl_r, mode='lines', line=dict(color='#00d4aa',width=2),
+            fill='tozeroy', fillcolor='rgba(0,212,170,0.05)',
             hovertemplate='PLD: R$ %{x:.0f}<br>PnL: R$ %{y:,.0f}<extra></extra>'))
-        fig_sens.add_vline(x=pld, line_color='#94a3b8', line_dash='dash', annotation_text=f"PLD atual: R${pld:.0f}", annotation_font_color='#94a3b8')
-        fig_sens.add_vline(x=pld_sim, line_color='#fbbf24', line_dash='dot', annotation_text=f"Cenário: R${pld_sim:.0f}", annotation_font_color='#fbbf24')
-        fig_sens.add_hline(y=0, line_color='#475569', line_dash='dash')
-        fig_sens.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        fig_s.add_vline(x=pld,     line_color='#94a3b8', line_dash='dash', annotation_text=f"Atual R${pld:.0f}", annotation_font_color='#94a3b8')
+        fig_s.add_vline(x=pld_sim, line_color='#fbbf24', line_dash='dot',  annotation_text=f"Cenário R${pld_sim:.0f}", annotation_font_color='#fbbf24')
+        fig_s.add_hline(y=0, line_color='#475569', line_dash='dash')
+        fig_s.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
             xaxis=dict(gridcolor='#1e293b', color='#475569', title='PLD (R$/MWh)'),
             yaxis=dict(gridcolor='#1e293b', color='#475569', title='PnL (R$)'),
-            margin=dict(l=10, r=10, t=40, b=10), height=320,
-            font=dict(family='JetBrains Mono', size=11, color='#94a3b8'),
-            title=dict(text='Sensibilidade do Portfólio ao PLD', font=dict(size=13, color='#94a3b8'))
-        )
-        st.plotly_chart(fig_sens, use_container_width=True)
-
-        st.markdown("---")
-        st.markdown("#### 📊 Tabela Resumo")
-        rows = []
-        for c, pnl_s in zip(contratos, pnl_sim_list):
-            rows.append({
-                'Contrato': c['nome'], 'Tipo': c['tipo'], 'Submercado': c['submercado'],
-                'Preço (R$/MWh)': f"{c['preco']:.2f}", 'Volume (MW)': c['volume_mw'],
-                'PnL Atual (R$)': c['pnl_atual'], 'PnL Cenário (R$)': pnl_s,
-            })
-        df_res = pd.DataFrame(rows)
-        st.dataframe(
-            df_res.style
-                .format({'PnL Atual (R$)': '{:,.2f}', 'PnL Cenário (R$)': '{:,.2f}'})
-                .applymap(lambda v: f'color: {"#00d4aa" if v >= 0 else "#fb7185"}', subset=['PnL Atual (R$)', 'PnL Cenário (R$)'])
-                .set_properties(**{'text-align': 'center', 'font-family': 'JetBrains Mono, monospace'})
-                .set_table_styles([{'selector': 'th', 'props': [('font-weight','bold'),('text-align','center')]}]),
-            use_container_width=True, hide_index=True
-        )
+            margin=dict(l=10,r=10,t=30,b=10), height=300,
+            font=dict(family='JetBrains Mono', size=11, color='#94a3b8'))
+        st.plotly_chart(fig_s, use_container_width=True)
 
 # ════════════════════════════════════════════════════════════════════════════════
 # LOG DE TURNOS
 # ════════════════════════════════════════════════════════════════════════════════
 elif pagina == 'log':
     gdt = st.session_state['game_datetime']
-    turno = st.session_state['turno']
     st.markdown("# 📜 Log de Turnos")
-    st.markdown(f"<p style='color:#475569; font-size:0.85rem; margin-top:-0.5rem;'>Histórico de eventos do simulador · Turno <b style='color:#00d4aa'>#{turno}</b> · {gdt.strftime('%d/%m/%Y %H:%M')}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:#475569;font-size:0.85rem;margin-top:-0.5rem;'>Turno <b style='color:#00d4aa'>#{turno}</b> · {gdt.strftime('%d/%m/%Y %H:%M')} · {_market_status_str(gdt)}</p>", unsafe_allow_html=True)
     st.markdown("---")
-
-    # ── Linha do tempo resumida ───────────────────────────────────────────────
-    col_a, col_b, col_c, col_d = st.columns(4)
-    col_a.metric("Turnos Jogados",    turno)
-    col_b.metric("Horas de Jogo",     turno * HOURS_PER_TURN)
-    col_c.metric("Dias Simulados",    turno * HOURS_PER_TURN // 24)
-    col_d.metric("Próx. PLD (h)",     PLD_UPDATE_HOURS - (turno % PLD_UPDATE_HOURS) if turno > 0 else PLD_UPDATE_HOURS)
-
+    ca,cb,cc,cd = st.columns(4)
+    ca.metric("Turnos Jogados", turno)
+    cb.metric("Horas Simuladas", turno)
+    cc.metric("Dias Simulados", turno // 24)
+    cd.metric("RFQs Pendentes", len([r for r in st.session_state.get('pending_rfqs',[]) if r['status']=='pendente']))
     st.markdown("")
-    st.markdown("#### 📋 Eventos Recentes")
-
-    turn_log = st.session_state.get('turn_log', [])
+    turn_log = st.session_state.get('turn_log',[])
     if not turn_log:
-        st.markdown("<div class='warn-box'>⚠️ Nenhum turno avançado ainda. Use o botão <b>⏩ AVANÇAR TURNO</b> na barra lateral para começar.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='warn-box'>⚠️ Nenhum turno avançado ainda.</div>", unsafe_allow_html=True)
     else:
-        log_html = ""
-        for item in reversed(turn_log):
-            log_html += f"<div class='turn-log-item'>{item}</div>"
-        st.markdown(f"""
-        <div style='background:#0d1117; border:1px solid #1e293b; border-radius:8px;
-                    padding:0.75rem 1rem; max-height:500px; overflow-y:auto;'>
-            {log_html}
-        </div>
-        """, unsafe_allow_html=True)
-
+        log_html = "".join(f"<div class='turn-log-item'>{item}</div>" for item in reversed(turn_log))
+        st.markdown(f"""<div style='background:#0d1117;border:1px solid #1e293b;border-radius:8px;padding:0.75rem 1rem;max-height:500px;overflow-y:auto;'>{log_html}</div>""", unsafe_allow_html=True)
     st.markdown("---")
-    st.markdown("#### ⚙️ Configurações do Motor de Turnos")
-    st.markdown(f"""
-    <div style='display:flex; gap:1rem; flex-wrap:wrap;'>
-        <div class='card' style='flex:1; min-width:180px;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem; color:#475569; text-transform:uppercase;'>Duração do Turno</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:1.4rem; font-weight:700; color:#00d4aa;'>{HOURS_PER_TURN}h</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#334155;'>por clique</div>
+    st.markdown("""
+    <div style='display:flex;gap:1rem;flex-wrap:wrap;'>
+        <div class='card' style='flex:1;min-width:140px;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>Mercado Aberto</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1rem;font-weight:700;color:#00d4aa;'>09:00 – 18:00</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#334155;'>Seg a Sex</div>
         </div>
-        <div class='card' style='flex:1; min-width:180px;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem; color:#475569; text-transform:uppercase;'>Atualização PLD</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:1.4rem; font-weight:700; color:#60a5fa;'>cada {PLD_UPDATE_HOURS}h</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#334155;'>4× por dia simulado</div>
+        <div class='card' style='flex:1;min-width:140px;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>PLD Mensal</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1rem;font-weight:700;color:#60a5fa;'>Cada 6h de jogo</div>
         </div>
-        <div class='card' style='flex:1; min-width:180px;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem; color:#475569; text-transform:uppercase;'>Atualização Meteo</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:1.4rem; font-weight:700; color:#a78bfa;'>cada {METEO_UPDATE_HOURS}h</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#334155;'>1× por dia simulado</div>
+        <div class='card' style='flex:1;min-width:140px;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>Meteo</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1rem;font-weight:700;color:#a78bfa;'>Cada 24h de jogo</div>
         </div>
-        <div class='card' style='flex:1; min-width:180px;'>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.6rem; color:#475569; text-transform:uppercase;'>Data de Início</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:1.0rem; font-weight:700; color:#e2e8f0;'>{(st.session_state["game_datetime"] - timedelta(hours=turno)).strftime("%d/%m/%Y %H:%M")}</div>
-            <div style='font-family:JetBrains Mono,monospace; font-size:0.65rem; color:#334155;'>origem da timeline</div>
+        <div class='card' style='flex:1;min-width:140px;'>
+            <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>Contrapartes</div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1rem;font-weight:700;color:#fbbf24;'>108 agentes</div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+    </div>""", unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════════════════════════════════════
+# CONTRAPARTES
+# ════════════════════════════════════════════════════════════════════════════════
+elif pagina == 'contrapartes':
+    st.markdown("# 🏢 Contrapartes")
+    st.markdown(f"<p style='color:#475569;font-size:0.85rem;margin-top:-0.5rem;'>{len(COUNTERPARTIES)} agentes simulados no mercado</p>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # Filtros
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        filtro_tipo = st.selectbox("Filtrar por tipo", ["Todos","Vendedora","Compradora","Ambos"])
+    with col_f2:
+        filtro_texto = st.text_input("Buscar por nome", placeholder="Digite para filtrar...")
+
+    tipos_cores = {"Vendedora": "#fb7185", "Compradora": "#00d4aa", "Ambos": "#a78bfa"}
+    tipos_labels = {"Vendedora": "VEND", "Compradora": "COMP", "Ambos": "AMBOS"}
+    cps_filtrados = COUNTERPARTIES
+    if filtro_tipo != "Todos":
+        cps_filtrados = [cp for cp in cps_filtrados if cp['tipo'] == filtro_tipo]
+    if filtro_texto:
+        cps_filtrados = [cp for cp in cps_filtrados if filtro_texto.lower() in cp['nome'].lower()]
+
+    # Estatísticas
+    n_vend = sum(1 for cp in COUNTERPARTIES if cp['tipo']=='Vendedora')
+    n_comp = sum(1 for cp in COUNTERPARTIES if cp['tipo']=='Compradora')
+    n_amb  = sum(1 for cp in COUNTERPARTIES if cp['tipo']=='Ambos')
+    c1,c2,c3,c4 = st.columns(4)
+    c1.metric("Total", len(COUNTERPARTIES))
+    c2.metric("Vendedoras", n_vend)
+    c3.metric("Compradoras", n_comp)
+    c4.metric("Ambos",  n_amb)
+    st.markdown("")
+
+    st.markdown(f"**Exibindo {len(cps_filtrados)} contraparte(s)**")
+    for cp in cps_filtrados:
+        cor  = tipos_cores.get(cp['tipo'], '#94a3b8')
+        label= tipos_labels.get(cp['tipo'], cp['tipo'])
+        agg  = int(cp['agressividade'] * 10)
+        barra= "█" * agg + "░" * (10-agg)
+        st.markdown(f"""<div style='background:#111827;border:1px solid #1e293b;border-radius:6px;padding:0.6rem 1rem;margin-bottom:4px;
+                    display:flex;align-items:center;gap:1rem;font-family:JetBrains Mono,monospace;font-size:0.75rem;'>
+            <span style='color:{cor};font-weight:700;min-width:50px;'>{label}</span>
+            <span style='color:#e2e8f0;min-width:220px;'>{cp["nome"]}</span>
+            <span style='color:#64748b;flex:1;'>{cp["descricao"]}</span>
+            <span style='color:#334155;font-size:0.65rem;'>Agressiv: <span style='color:{cor};'>{barra}</span></span>
+        </div>""", unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════════════════════════
 # GLOSSÁRIO
 # ════════════════════════════════════════════════════════════════════════════════
 elif pagina == 'glossario':
     st.markdown("# 📚 Glossário")
-    st.markdown("<p style='color:#475569; font-size:0.85rem; margin-top:-0.5rem;'>Conceitos essenciais do mercado livre de energia</p>", unsafe_allow_html=True)
     st.markdown("---")
-
     termos = [
-        ("PLD — Preço de Liquidação das Diferenças",
-         "Preço calculado semanalmente pela CCEE com base no Custo Marginal de Operação (CMO) do sistema elétrico. Reflete o custo de se produzir mais uma unidade de energia naquele momento. É o principal referencial de preço no mercado de curto prazo."),
-        ("CMO — Custo Marginal de Operação",
-         "Custo de se atender a mais uma unidade de demanda no sistema. Em períodos secos, com reservatórios baixos, o CMO sobe porque é necessário acionar termoelétricas mais caras. Em períodos úmidos, o CMO cai."),
-        ("ACL — Ambiente de Contratação Livre",
-         "Segmento do mercado onde consumidores com demanda acima de 500 kW podem comprar energia livremente de qualquer gerador ou comercializador, negociando preço, prazo e condições."),
-        ("ACR — Ambiente de Contratação Regulada",
-         "Segmento onde distribuidoras compram energia em leilões regulados pela ANEEL para atender consumidores cativos (residências, pequenas empresas etc.)."),
-        ("Submercado",
-         "O Brasil é dividido em 4 submercados: SE/CO (Sudeste/Centro-Oeste), S (Sul), NE (Nordeste) e N (Norte). Cada um tem seu próprio PLD, que pode diferir dos demais por conta de restrições de transmissão."),
-        ("Afluência Natural",
-         "Volume de água que chega naturalmente aos reservatórios das usinas hidrelétricas, expresso em % da MLT (Média de Longo Termo). Afluência acima de 100% indica condições hídricas favoráveis."),
-        ("MLT — Média de Longo Termo",
-         "Média histórica das afluências naturais dos reservatórios, calculada com base em séries de 70+ anos. É a referência para avaliar se um período hidrológico é seco ou úmido."),
-        ("Reservatório EAR",
-         "Energia Armazenável Real nos reservatórios das hidrelétricas, expressa em % da capacidade total. EAR abaixo de 20% configura estado de atenção; abaixo de 10%, estado crítico."),
-        ("Posição Comprada (Long)",
-         "Quando você comprou mais energia do que vendeu. Você se beneficia quando o PLD sobe acima do seu preço de compra, pois pode revender no spot com lucro."),
-        ("Posição Vendida (Short)",
-         "Quando você vendeu mais energia do que comprou. Você se beneficia quando o PLD cai abaixo do seu preço de venda."),
-        ("Gross-up de PIS/COFINS",
-         "Ajuste no preço da energia para embutir os impostos PIS/COFINS (alíquota de 9,25%). Fórmula: Preço Gross-up = Preço / (1 − 9,25%)."),
-        ("Mark to Market (MtM)",
-         "Reavaliação dos contratos a preços de mercado correntes (PLD atual). O PnL MtM mostra quanto você ganharia ou perderia se liquidasse tudo hoje."),
-        ("Contrato Bilateral",
-         "Acordo direto entre duas partes (comprador e vendedor) fora do ambiente de leilão. Permite flexibilidade total na negociação de preço, prazo, volume e índice de reajuste."),
-        ("Energia Incentivada",
-         "Energia proveniente de fontes renováveis (solar, eólica, PCH, biomassa) que possui desconto de 50% ou 100% na TUSD/TUST. Consumidores que compram esse tipo de energia podem migrar ao ACL com demanda a partir de 500 kW (50%) ou 30 kW (100%)."),
-        ("CCEE — Câmara de Comercialização de Energia Elétrica",
-         "Entidade que administra o mercado de curto prazo (spot) no Brasil. Calcula e publica o PLD, realiza a liquidação financeira das diferenças entre o contratado e o consumido/gerado."),
-        ("Fator de Capacidade",
-         "Relação entre a geração efetiva de uma usina e sua capacidade instalada máxima, em %. Para eólica no NE, valores acima de 50% são considerados excelentes."),
-        ("Delta",
-         "Variação do PnL para uma variação unitária no PLD. Indica a sensibilidade do portfólio. Um delta positivo (posição comprada) significa que o portfólio ganha quando o PLD sobe."),
-        ("Spread",
-         "Diferença entre o preço de compra e o preço de venda. O lucro de um comercializador vem em parte desse spread entre o que paga ao gerador e o que cobra do consumidor."),
-        ("Turno (Jogo)",
-         f"Unidade de tempo do simulador. Cada turno avança {HOURS_PER_TURN} hora(s) no relógio do jogo. O PLD é recalculado a cada {PLD_UPDATE_HOURS} turnos; os dados meteorológicos, a cada {METEO_UPDATE_HOURS} turnos."),
+        ("PLD Mensal", "Preço de Liquidação das Diferenças calculado mensalmente pelo DESSEM/CCEE. No simulador, refletido no nível médio do mês com variações a cada 6 turnos."),
+        ("MW médio (MWm)", "Potência média contratada para o período. A energia total = MWm × horas do período. Ex: 5 MWm × 720h = 3.600 MWh."),
+        ("Produto (mês/trimestre/ano)", "Cada produto tem o nome real: 'JAN/26', 'T1/26', 'ANO/2026'. O preço sobe levemente com o prazo (prêmio de curva de ~0,5%/mês)."),
+        ("DESSEM", "Modelo de despacho hidrotérmico de curto prazo (ONS). Base do PLD horário desde 2020. Usa MILP com unit commitment de termelétricas."),
+        ("CMO", "Custo Marginal de Operação — custo-sombra do balanço de carga no DESSEM. Determina o PLD antes dos limites regulatórios."),
+        ("Order Book (Livro de Ordens)", "Registro de bids (compradores) e asks (vendedores) por produto. Spread = Ask mín − Bid máx."),
+        ("RFQ", "Request for Quote — pedido de cotação de uma das 108 contrapartes. Aceite, recusa ou contraproposta durante 09h–18h."),
+        ("Curva Forward", "Sequência de preços por produto: preços futuros tipicamente acima do PLD spot por conta do prêmio de risco de prazo."),
+        ("Calendar Spread", "Compra de um produto + venda de outro prazo. Ex: compra ANO/2027 + venda T1/26 apostando em spread crescente."),
+        ("Mark to Market (MtM)", "PnL = (PLD − Preço) × MWm × Horas para compras. Para vendas, sinal invertido."),
+        ("Horário de Mercado", "09:00–18:00 de dias úteis (horário do jogo). RFQs e ordens só são processados nesse período."),
+        ("f_meteo", "Fator de pressão climatológica sobre o PLD. >1.2 = crítico (alta); <0.9 = favorável (baixa). Gerado pelas variáveis hidrológicas."),
+        ("MLT / EAR", "MLT = Média de Longo Termo das afluências. EAR = Energia Armazenável Real (%). Indicadores-chave de risco hídrico."),
     ]
-
-    for termo, definicao in termos:
+    for termo, defin in termos:
         with st.expander(f"📌 {termo}"):
-            st.markdown(f"""
-            <div style='font-family: Syne, sans-serif; font-size: 0.88rem; color: #94a3b8; line-height: 1.7; padding: 0.25rem 0;'>
-                {definicao}
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"<div style='font-family:Syne,sans-serif;font-size:0.88rem;color:#94a3b8;line-height:1.7;'>{defin}</div>", unsafe_allow_html=True)
