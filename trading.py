@@ -74,6 +74,21 @@ h1, h2, h3 { font-family: 'Syne', sans-serif; font-weight: 800; letter-spacing: 
 .turn-log-item span.deal { color: #fbbf24; }
 .rfq-card { background: rgba(167,139,250,0.05); border: 1px solid rgba(167,139,250,0.3); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 0.75rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #a78bfa; }
 hr { border-color: #1e293b; }
+
+.perfil-badge { display:inline-block; padding:1px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; }
+.perfil-agressiva    { background:rgba(251,191,36,0.15);  color:#fbbf24; border:1px solid rgba(251,191,36,0.35); }
+.perfil-conservadora { background:rgba(96,165,250,0.15);  color:#60a5fa; border:1px solid rgba(96,165,250,0.35); }
+.perfil-inadimplente { background:rgba(251,113,133,0.15); color:#fb7185; border:1px solid rgba(251,113,133,0.35); }
+.perfil-padrao       { background:rgba(100,116,139,0.10); color:#64748b; border:1px solid rgba(100,116,139,0.25); }
+.evento-card  { border-radius:8px; padding:0.75rem 1rem; margin-bottom:0.5rem; font-family:'JetBrains Mono',monospace; }
+.evento-danger{ background:rgba(251,113,133,0.07); border:1px solid rgba(251,113,133,0.4); }
+.evento-warn  { background:rgba(251,191,36,0.07);  border:1px solid rgba(251,191,36,0.4);  }
+.evento-info  { background:rgba(96,165,250,0.07);  border:1px solid rgba(96,165,250,0.4);  }
+.margem-bar   { background:#1e293b; border-radius:4px; height:7px; overflow:hidden; margin-top:5px; }
+.margem-fill  { height:7px; border-radius:4px; transition:width 0.3s; }
+.liquidado-row{ background:rgba(0,212,170,0.04); border:1px solid rgba(0,212,170,0.15); border-radius:5px; padding:5px 10px; margin-bottom:3px; font-family:'JetBrains Mono',monospace; font-size:0.77rem; }
+.default-row  { background:rgba(251,113,133,0.04); border:1px solid rgba(251,113,133,0.2); border-radius:5px; padding:5px 10px; margin-bottom:3px; font-family:'JetBrains Mono',monospace; font-size:0.77rem; }
+.ponta-badge  { display:inline-block; background:rgba(251,191,36,0.15); color:#fbbf24; border:1px solid rgba(251,191,36,0.4); border-radius:3px; padding:1px 8px; font-family:'JetBrains Mono',monospace; font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -95,6 +110,42 @@ SUBM  = {"SE/CO": 1.0, "S": 0.95, "NE": 1.05, "N": 1.10}
 TIPOS_ENERGIA = ["Convencional", "Incentivada 50%", "Incentivada 100%"]
 INDICES       = ["Preço Fixo", "PLD Spot", "PLD Médio Mensal", "IPCA + Spread", "IGP-M + Spread"]
 ORDER_TYPES   = ["Limite", "Mercado (Market)", "IOC (Immediate or Cancel)"]
+
+FATOR_PONTA     = 1.20        # PLD +20% nas horas de ponta (17–18h)
+LIMITE_CREDITO  = 10_000_000  # R$ 10M — notional máximo em aberto
+
+EVENTOS_MERCADO = [
+    {"id":"seca_ne",    "titulo":"🌵 Seca Severa no Nordeste",
+     "desc":"ANA declara alerta hídrico no NE. Reservatórios abaixo de 25%. PLD pressiona alta.",
+     "delta_pld":+18, "dur":14, "cor":"danger"},
+    {"id":"chuvas_se",  "titulo":"🌧️ Chuvas Acima da Média no SE/CO",
+     "desc":"Afluências superam 130% da MLT. Despacho hídrico pleno. PLD cede.",
+     "delta_pld":-14, "dur":10, "cor":"info"},
+    {"id":"lt_falha",   "titulo":"⚡ Falha em LT 500 kV Norte–Sul",
+     "desc":"Linha de transmissão tripou em manutenção não programada. Restrição de intercâmbio.",
+     "delta_pld":+22, "dur":7,  "cor":"danger"},
+    {"id":"ons_alerta", "titulo":"🚨 ONS Declara Alerta de Escassez",
+     "desc":"ONS ativa alerta de escassez energética. Bandeira Vermelha 2 em vigor.",
+     "delta_pld":+35, "dur":20, "cor":"danger"},
+    {"id":"vento_ne",   "titulo":"💨 Ventos Fortes no Nordeste",
+     "desc":"Frente fria eleva geração eólica a 90% da capacidade instalada. PLD alivia.",
+     "delta_pld":-10, "dur":6,  "cor":"info"},
+    {"id":"ute_pane",   "titulo":"🔥 Pane em Usina Termelétrica",
+     "desc":"UTE de 600 MW sai de operação por falha mecânica. Reserva de capacidade reduzida.",
+     "delta_pld":+20, "dur":12, "cor":"danger"},
+    {"id":"onda_calor", "titulo":"🌡️ Onda de Calor — Demanda Recorde",
+     "desc":"Temperatura acima de 38 °C nas capitais. ONS registra novo pico de carga horário.",
+     "delta_pld":+25, "dur":9,  "cor":"warn"},
+    {"id":"gas_crise",  "titulo":"⛽ Crise de Suprimento de Gás",
+     "desc":"Petrobras restringe gás para termelétricas. Despacho termal reduzido.",
+     "delta_pld":+30, "dur":16, "cor":"danger"},
+    {"id":"cheias_sul", "titulo":"🌊 Cheias no Rio Grande do Sul",
+     "desc":"Afluências excepcionais no Sul. Usinas operam plena carga.",
+     "delta_pld":-16, "dur":12, "cor":"info"},
+    {"id":"importacao", "titulo":"🌐 Importação Emergencial do Uruguai",
+     "desc":"Brasil fecha contrato emergencial de importação. Curto prazo aliviado.",
+     "delta_pld":-8,  "dur":5,  "cor":"info"},
+]
 
 # ── 100+ Contrapartes ──────────────────────────────────────────────────────────
 def _build_counterparties():
@@ -193,6 +244,17 @@ def _build_counterparties():
                     "descricao": "Distribuidora — alta urgência no fim do mês",
                     "submercados_pref": ["SE/CO","NE","S"], "spread_ref": random.uniform(-0.02, 0.02)})
 
+    # ── Atribuição de perfis comportamentais ──────────────────────────────────
+    _pesos = ["padrao"] * 5 + ["agressiva"] * 2 + ["conservadora"] * 2 + ["inadimplente"] * 1
+    _distrib_urgente = ["agressiva", "agressiva", "padrao"]
+    _distrib_pequeno = ["inadimplente", "inadimplente", "padrao"]
+    for cp in cps:
+        if any(k in cp["nome"] for k in ["Cemig D","Copel DIS","CPFL Paulista","Elektro","Light","Equatorial","Coelba","Celpe"]):
+            cp["perfil"] = random.choice(_distrib_urgente)
+        elif cp["nome"].startswith("PCH"):
+            cp["perfil"] = random.choice(_distrib_pequeno)
+        else:
+            cp["perfil"] = random.choice(_pesos)
     return cps
 
 COUNTERPARTIES = _build_counterparties()
@@ -335,12 +397,15 @@ def salvar_estado():
             'datas': [str(d) for d in df_hist['Data'].tolist()],
             'plds':  df_hist['PLD (R$/MWh)'].tolist(),
         },
-        'meteo':         st.session_state.get('meteo', {}),
-        'turno':         st.session_state.get('turno', 0),
-        'game_datetime': st.session_state['game_datetime'].isoformat(),
-        'turn_log':      st.session_state.get('turn_log', []),
-        'order_book':    st.session_state.get('order_book', {}),
-        'pending_rfqs':  st.session_state.get('pending_rfqs', []),
+        'meteo':          st.session_state.get('meteo', {}),
+        'turno':          st.session_state.get('turno', 0),
+        'game_datetime':  st.session_state['game_datetime'].isoformat(),
+        'turn_log':       st.session_state.get('turn_log', []),
+        'order_book':     st.session_state.get('order_book', {}),
+        'pending_rfqs':   st.session_state.get('pending_rfqs', []),
+        'eventos_ativos': st.session_state.get('eventos_ativos', []),
+        'liquidacoes':    st.session_state.get('liquidacoes', []),
+        'limite_credito': st.session_state.get('limite_credito', LIMITE_CREDITO),
     }
     with open(SAVE_FILE, 'w', encoding='utf-8') as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -427,6 +492,102 @@ def _impacto_meteo_no_pld(meteo):
         fator -= 0.03; alertas.append(("✅","info",f"Temperatura amena ({temp:.1f}°C) — menor pressão sobre a demanda"))
     return round(fator, 3), alertas
 
+# ────────────────────────────────────────────────────────────────────────────────
+# Sazonalidade e hora de ponta
+# ────────────────────────────────────────────────────────────────────────────────
+def _fator_sazonalidade(gdt: datetime) -> float:
+    mes = gdt.month
+    if mes in [12, 1, 2, 3]:  return 0.90   # período úmido → PLD tende baixo
+    if mes in [6, 7, 8, 9]:   return 1.12   # período seco  → PLD tende alto
+    return 1.0
+
+def _is_hora_ponta(gdt: datetime) -> bool:
+    return gdt.weekday() < 5 and gdt.hour in [17, 18]
+
+def _label_sazonalidade(gdt: datetime) -> str:
+    mes = gdt.month
+    if mes in [12, 1, 2, 3]: return "Período Úmido", "#60a5fa"
+    if mes in [6, 7, 8, 9]:  return "Período Seco",  "#fb7185"
+    return "Transição", "#fbbf24"
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Eventos de mercado
+# ────────────────────────────────────────────────────────────────────────────────
+def _gerar_evento_mercado(gdt: datetime, turno: int):
+    ativos = st.session_state.get('eventos_ativos', [])
+    if ativos:
+        return None
+    if random.random() > 0.05:
+        return None
+    evt = dict(random.choice(EVENTOS_MERCADO))
+    evt['expira_turno'] = turno + evt['dur']
+    evt['aplicado_em']  = gdt.strftime('%d/%m %H:%M')
+    return evt
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Liquidação de contratos vencidos
+# ────────────────────────────────────────────────────────────────────────────────
+def _verificar_vencimentos(new_dt: datetime) -> list:
+    eventos  = []
+    saldo    = st.session_state.get('saldo_caixa', 0.0)
+    liq_hist = st.session_state.get('liquidacoes', [])
+    for c in st.session_state['contratos']:
+        if c.get('status') in ('liquidado', 'inadimplido'):
+            continue
+        data_fim = c.get('data_fim')
+        if not isinstance(data_fim, date):
+            continue
+        if new_dt.date() < data_fim:
+            continue
+        _recalc_pnl(c)
+        pnl = c.get('pnl_atual', 0.0)
+        cp_nome = c.get('contraparte', '')
+        cp_obj  = next((x for x in COUNTERPARTIES if x['nome'] == cp_nome), None)
+        if cp_obj and cp_obj.get('perfil') == 'inadimplente' and random.random() < 0.25:
+            recuperado = round(pnl * 0.40, 2)
+            saldo += recuperado
+            c['status']        = 'inadimplido'
+            c['pnl_realizado'] = recuperado
+            liq_hist.append({'nome': c['nome'], 'contraparte': cp_nome,
+                             'pnl_realizado': recuperado, 'status': 'inadimplido',
+                             'data': new_dt.strftime('%d/%m/%Y')})
+            eventos.append(f'<span class="neg">💀 INADIMPLÊNCIA — {c["nome"]} c/ {cp_nome}: recuperação 40% = {_fmt_brl(recuperado)}</span>')
+        else:
+            saldo += pnl
+            c['status']        = 'liquidado'
+            c['pnl_realizado'] = pnl
+            liq_hist.append({'nome': c['nome'], 'contraparte': cp_nome,
+                             'pnl_realizado': pnl, 'status': 'liquidado',
+                             'data': new_dt.strftime('%d/%m/%Y')})
+            sinal = "pos" if pnl >= 0 else "neg"
+            eventos.append(f'<span class="ev">📦 Liquidação </span><span class="deal">{c["nome"]}</span>'
+                           f' <span class="{sinal}">{_fmt_brl(pnl)}</span>')
+    st.session_state['saldo_caixa'] = round(saldo, 2)
+    st.session_state['liquidacoes'] = liq_hist[-50:]
+    return eventos
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Margem / limite de crédito
+# ────────────────────────────────────────────────────────────────────────────────
+def _notional_aberto() -> float:
+    return sum(
+        c.get('volume_mwm', 1) * c.get('horas', 720) * c.get('preco', 0)
+        for c in st.session_state['contratos']
+        if c.get('status') not in ('liquidado', 'inadimplido')
+    )
+
+def _margem_pct() -> float:
+    lim = st.session_state.get('limite_credito', LIMITE_CREDITO)
+    return min(1.0, _notional_aberto() / lim) if lim > 0 else 0.0
+
+def _pode_negociar(volume_mwm: float, horas: int, preco: float):
+    novo_notional   = volume_mwm * horas * preco
+    total_notional  = _notional_aberto() + novo_notional
+    lim = st.session_state.get('limite_credito', LIMITE_CREDITO)
+    if total_notional > lim:
+        return False, f"Limite de crédito atingido (R$ {lim/1e6:.1f}M). Liquidez insuficiente."
+    return True, ""
+
 # ════════════════════════════════════════════════════════════════════════════════
 # LIVRO DE ORDENS
 # ════════════════════════════════════════════════════════════════════════════════
@@ -512,6 +673,10 @@ def _prob_aceitar(preco_oferta, preco_ref, fator_meteo, tipo_ordem, cp):
         delta_p = (preco_ref - preco_oferta) / max(preco_ref, 1)
     urgencia = 1 if random.random() < cp.get("agressividade", 0.5) else 0
     z = 15.0 * delta_p + 0.3 * (fator_meteo - 1.0) + 0.2 * urgencia
+    perfil = cp.get('perfil', 'padrao')
+    if perfil == 'agressiva':    z += 0.6
+    if perfil == 'conservadora': z -= 1.0
+    if perfil == 'inadimplente': z += 0.4   # aceita mais fácil, não se importa em honrar depois
     return round(1 / (1 + math.exp(-z)), 3)
 
 def _executar_ordem_mercado(tipo, produto_cod, volume_mwm, subm, gdt):
@@ -554,7 +719,8 @@ def _avancar_turno():
         fator_meteo, _ = _impacto_meteo_no_pld(st.session_state['meteo'])
         ruido    = random.gauss(0, 8)
         pld_med  = st.session_state['pld_historico']['PLD (R$/MWh)'].mean()
-        pressao  = (pld_med * fator_meteo - st.session_state['pld_atual']) * 0.06
+        f_saz    = _fator_sazonalidade(new_dt)
+        pressao  = (pld_med * fator_meteo * f_saz - st.session_state['pld_atual']) * 0.06
         novo_pld = max(30, min(500, st.session_state['pld_atual'] + ruido + pressao))
         delta    = novo_pld - st.session_state['pld_atual']
         st.session_state['pld_atual'] = round(novo_pld, 2)
@@ -572,11 +738,34 @@ def _avancar_turno():
             st.session_state['pending_rfqs'] = pending
             eventos.append(f'<span class="rfq">📨 RFQ de {rfq["contraparte"]} — {rfq["tipo"]} {rfq["produto_cod"]} R${rfq["preco"]:.2f} · {rfq["volume_mwm"]:.1f} MWm</span>')
 
+    # ── Pressão de hora de ponta ───────────────────────────────────────────────
+    if _is_hora_ponta(new_dt):
+        spike = round(random.uniform(2.5, 7.0), 2)
+        st.session_state['pld_atual'] = round(min(500, st.session_state['pld_atual'] + spike), 2)
+        eventos.append(f'<span class="ev">⚡ Hora de ponta</span> <span class="pos">+R$ {spike:.2f} pressão PLD</span>')
+
+    # ── Eventos de mercado ─────────────────────────────────────────────────────
+    ativos = [e for e in st.session_state.get('eventos_ativos', []) if e['expira_turno'] > turno]
+    if _is_market_open(new_dt):
+        novo_evt = _gerar_evento_mercado(new_dt, turno)
+        if novo_evt:
+            st.session_state['pld_atual'] = round(
+                max(30, min(500, st.session_state['pld_atual'] + novo_evt['delta_pld'])), 2)
+            ativos.append(novo_evt)
+            sinal_evt = "pos" if novo_evt['delta_pld'] < 0 else "neg"
+            eventos.append(f'<span class="rfq">📰 EVENTO: {novo_evt["titulo"]}</span>'
+                           f' <span class="{sinal_evt}">PLD {novo_evt["delta_pld"]:+}R$</span>')
+    st.session_state['eventos_ativos'] = ativos
+
     # ── Meteo update ──────────────────────────────────────────────────────────
     if turno % METEO_UPDATE_HOURS == 0:
         _atualizar_meteo(new_dt)
         res = st.session_state['meteo']['reserv'][-1]
         eventos.append(f'<span class="ev">Meteo atualizado · Reserv.</span> <span class="{"neg" if res < 40 else "pos"}">{res:.0f}%</span>')
+
+    # ── Liquidação de contratos vencidos ──────────────────────────────────────
+    ev_liq = _verificar_vencimentos(new_dt)
+    eventos.extend(ev_liq)
 
     # ── Expirar RFQs ──────────────────────────────────────────────────────────
     pending = st.session_state.get('pending_rfqs', [])
@@ -608,6 +797,23 @@ def _avancar_turno():
     st.session_state['turn_log'] = log[-50:]
     salvar_estado()
 
+def _proxima_abertura(gdt: datetime) -> datetime:
+    """Retorna o datetime de 09:00 do próximo dia útil (ou hoje se ainda não abriu)."""
+    # Se ainda não chegou às 09h de um dia útil, abre hoje mesmo
+    if gdt.weekday() < 5 and gdt.hour < MARKET_OPEN_HOUR:
+        return gdt.replace(hour=MARKET_OPEN_HOUR, minute=0, second=0, microsecond=0)
+    # Caso contrário avança para o próximo dia útil
+    candidato = gdt.replace(hour=MARKET_OPEN_HOUR, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    while candidato.weekday() >= 5:
+        candidato += timedelta(days=1)
+    return candidato
+
+def _avancar_ate_abertura():
+    """Avança o jogo em bloco até 09:00 do próximo dia útil, processando cada turno."""
+    alvo = _proxima_abertura(st.session_state['game_datetime'])
+    while st.session_state['game_datetime'] < alvo:
+        _avancar_turno()
+
 # ════════════════════════════════════════════════════════════════════════════════
 # ESTADO INICIAL
 # ════════════════════════════════════════════════════════════════════════════════
@@ -623,18 +829,24 @@ if 'estado_carregado' not in st.session_state:
         st.session_state['meteo']        = salvo.get('meteo') or _gerar_meteo_inicial()
         st.session_state['turno']        = salvo.get('turno', 0)
         st.session_state['turn_log']     = salvo.get('turn_log', [])
-        st.session_state['pending_rfqs'] = salvo.get('pending_rfqs', [])
+        st.session_state['pending_rfqs']  = salvo.get('pending_rfqs', [])
+        st.session_state['eventos_ativos']= salvo.get('eventos_ativos', [])
+        st.session_state['liquidacoes']   = salvo.get('liquidacoes', [])
+        st.session_state['limite_credito']= salvo.get('limite_credito', LIMITE_CREDITO)
         gdt = salvo.get('game_datetime')
         st.session_state['game_datetime'] = datetime.fromisoformat(gdt) if gdt else datetime.now().replace(minute=0, second=0, microsecond=0)
         ob = salvo.get('order_book')
         st.session_state['order_book'] = ob if ob else {}
     else:
-        st.session_state['contratos']    = []
-        st.session_state['saldo_caixa']  = 0.0
-        st.session_state['pagina']       = 'mercado'
-        st.session_state['turno']        = 0
-        st.session_state['turn_log']     = []
-        st.session_state['pending_rfqs'] = []
+        st.session_state['contratos']     = []
+        st.session_state['saldo_caixa']   = 0.0
+        st.session_state['pagina']        = 'mercado'
+        st.session_state['turno']         = 0
+        st.session_state['turn_log']      = []
+        st.session_state['pending_rfqs']  = []
+        st.session_state['eventos_ativos']= []
+        st.session_state['liquidacoes']   = []
+        st.session_state['limite_credito']= LIMITE_CREDITO
         now = datetime.now().replace(minute=0, second=0, microsecond=0)
         days_to_monday = (7 - now.weekday()) % 7
         start = (now + timedelta(days=days_to_monday)).replace(hour=9)
@@ -728,6 +940,13 @@ with st.sidebar:
     if st.button("⏩  AVANÇAR TURNO  (+1h)", use_container_width=True, type="primary"):
         _avancar_turno(); st.rerun()
 
+    if not _is_market_open(gdt):
+        prox = _proxima_abertura(gdt)
+        horas_ate = int((prox - gdt).total_seconds() // 3600)
+        lbl = f"⏭  ATÉ ABERTURA  (+{horas_ate}h)" if horas_ate > 0 else "⏭  ATÉ ABERTURA"
+        if st.button(lbl, use_container_width=True):
+            _avancar_ate_abertura(); st.rerun()
+
     rfqs_pend = [r for r in st.session_state.get('pending_rfqs',[]) if r['status']=='pendente']
     if rfqs_pend:
         st.markdown(f"""<div style='background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);
@@ -736,11 +955,36 @@ with st.sidebar:
             📨 {len(rfqs_pend)} RFQ(s) aguardando</div>""", unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── Evento ativo ──────────────────────────────────────────────────────────
+    evts = st.session_state.get('eventos_ativos', [])
+    if evts:
+        e = evts[0]
+        cor_cls = e.get('cor', 'info')
+        st.markdown(f"<div class='evento-card evento-{cor_cls}' style='font-size:0.72rem;'>"
+                    f"<b style='font-size:0.68rem;text-transform:uppercase;letter-spacing:0.05em;'>{e['titulo']}</b><br>"
+                    f"<span style='color:#64748b;font-size:0.65rem;'>{e['desc']}</span></div>",
+                    unsafe_allow_html=True)
+
     pld = st.session_state['pld_atual']
+    ponta_str = " · <span class='ponta-badge'>PONTA</span>" if _is_hora_ponta(gdt) else ""
+    saz_lbl, saz_cor = _label_sazonalidade(gdt)
     st.markdown(f"""<div style='background:#111827;border:1px solid #1e293b;border-radius:6px;padding:0.75rem 1rem;margin-bottom:0.75rem;'>
-        <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>PLD Mensal (SE/CO)</div>
+        <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>PLD Mensal (SE/CO){ponta_str}</div>
         <div style='font-family:JetBrains Mono,monospace;font-size:1.4rem;font-weight:700;color:#00d4aa;margin-top:4px;'>R$ {pld:.2f}</div>
-        <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;'>R$/MWh · atualiza cada {PLD_UPDATE_HOURS}h</div>
+        <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;'>R$/MWh · <span style='color:{saz_cor};'>{saz_lbl}</span> · atualiza cada {PLD_UPDATE_HOURS}h</div>
+    </div>""", unsafe_allow_html=True)
+
+    # ── Barra de margem/crédito ───────────────────────────────────────────────
+    marg  = _margem_pct()
+    lim   = st.session_state.get('limite_credito', LIMITE_CREDITO)
+    cor_m = "#00d4aa" if marg < 0.60 else "#fbbf24" if marg < 0.85 else "#fb7185"
+    st.markdown(f"""<div style='background:#111827;border:1px solid #1e293b;border-radius:6px;padding:0.6rem 0.85rem;margin-bottom:0.75rem;'>
+        <div style='display:flex;justify-content:space-between;font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>
+            <span>Crédito Utilizado</span><span style='color:{cor_m};'>{marg:.0%}</span></div>
+        <div class='margem-bar'><div class='margem-fill' style='width:{marg*100:.1f}%;background:{cor_m};'></div></div>
+        <div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#334155;margin-top:4px;'>
+            Notional: R$ {_notional_aberto()/1e6:.2f}M / Limite R$ {lim/1e6:.1f}M</div>
     </div>""", unsafe_allow_html=True)
 
     n_c      = len(st.session_state['contratos'])
@@ -811,11 +1055,96 @@ if pagina == 'mercado':
     var_pld  = pld - df_hist['PLD (R$/MWh)'].iloc[-2] if len(df_hist) > 1 else 0
     fator_meteo, alertas = _impacto_meteo_no_pld(st.session_state['meteo'])
 
+    # Eventos ativos de mercado
+    for evt in st.session_state.get('eventos_ativos', []):
+        cor_cls = evt.get('cor', 'info')
+        turnos_rest = evt['expira_turno'] - turno
+        st.markdown(f"<div class='evento-card evento-{cor_cls}'>"
+                    f"<b>{evt['titulo']}</b> &nbsp;<span style='color:#475569;font-size:0.72rem;'>expira em {turnos_rest} turno(s)</span><br>"
+                    f"<span style='font-size:0.8rem;color:#94a3b8;'>{evt['desc']}</span></div>",
+                    unsafe_allow_html=True)
+    # Indicadores de sazonalidade e hora de ponta
+    saz_lbl, saz_cor = _label_sazonalidade(gdt)
+    ponta_info = " · <span class='ponta-badge'>⚡ HORA DE PONTA</span>" if _is_hora_ponta(gdt) else ""
+    st.markdown(f"<div class='info-box' style='margin-bottom:0.5rem;'>📅 <b style='color:{saz_cor};'>{saz_lbl}</b> — fator {_fator_sazonalidade(gdt):.2f}× sobre a média de longo prazo{ponta_info}</div>",
+                unsafe_allow_html=True)
     for icone, tipo, msg in alertas[:3]:
         box_class = "danger-box" if tipo=="danger" else "warn-box" if tipo=="warn" else "info-box"
         st.markdown(f"<div class='{box_class}'>{icone} {msg}</div>", unsafe_allow_html=True)
     if not _is_market_open(gdt):
         st.markdown(f"<div class='market-closed-box'>🔴 {_market_status_str(gdt)} — Ordens executadas entre 09:00 e 18:00</div>", unsafe_allow_html=True)
+
+        # ── Painel noturno ────────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("### 🌙 Central de Análise — Mercado Fechado")
+        st.markdown("<p style='color:#475569;font-size:0.83rem;margin-top:-0.5rem;'>Aproveite o tempo fora do pregão para revisar o cenário e preparar suas ordens.</p>", unsafe_allow_html=True)
+
+        pan1, pan2, pan3 = st.columns(3)
+
+        # Resumo do dia
+        with pan1:
+            contratos_hoje = [c for c in st.session_state['contratos']
+                              if isinstance(c.get('criado_em'), datetime) and c['criado_em'].date() == gdt.date()]
+            pnl_dia = sum(c.get('pnl_atual', 0) for c in contratos_hoje)
+            log_hoje = [l for l in st.session_state.get('turn_log', [])
+                        if gdt.strftime('%d/%m') in l]
+            st.markdown(f"""<div class='card'>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;margin-bottom:0.75rem;'>📋 Resumo do Dia</div>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.8rem;color:#94a3b8;margin-bottom:4px;'>
+                    Contratos fechados hoje: <b style='color:#e2e8f0;'>{len(contratos_hoje)}</b></div>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.8rem;color:#94a3b8;margin-bottom:4px;'>
+                    PnL desses contratos: <b style='color:{"#00d4aa" if pnl_dia>=0 else "#fb7185"};'>{_fmt_brl(pnl_dia)}</b></div>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.8rem;color:#94a3b8;'>
+                    Eventos no log hoje: <b style='color:#e2e8f0;'>{len(log_hoje)}</b></div>
+                <div style='margin-top:0.75rem;font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#334155;'>
+                    PLD encerramento: <b style='color:#00d4aa;'>R$ {st.session_state['pld_atual']:.2f}</b></div>
+            </div>""", unsafe_allow_html=True)
+
+        # Previsão meteorológica
+        with pan2:
+            meteo = st.session_state['meteo']
+            res   = meteo['reserv'][-1] if meteo['reserv'] else 50
+            chuva = meteo['precip'][-1] if meteo['precip'] else 80
+            fator_meteo, alertas_meteo = _impacto_meteo_no_pld(meteo)
+            cor_res   = "#00d4aa" if res >= 60 else "#fbbf24" if res >= 40 else "#fb7185"
+            cor_fat   = "#00d4aa" if fator_meteo <= 1.0 else "#fbbf24" if fator_meteo <= 1.2 else "#fb7185"
+            alerta_txt = alertas_meteo[0][2] if alertas_meteo else "Cenário estável"
+            st.markdown(f"""<div class='card'>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;margin-bottom:0.75rem;'>🌦️ Cenário Meteorológico</div>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.8rem;color:#94a3b8;margin-bottom:4px;'>
+                    Reservatórios: <b style='color:{cor_res};'>{res:.0f}%</b></div>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.8rem;color:#94a3b8;margin-bottom:4px;'>
+                    Chuvas: <b style='color:#e2e8f0;'>{chuva:.0f}%</b> da média</div>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.8rem;color:#94a3b8;margin-bottom:0.75rem;'>
+                    Pressão no PLD: <b style='color:{cor_fat};'>{fator_meteo:.2f}×</b></div>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.72rem;color:#64748b;border-top:1px solid #1e293b;padding-top:0.5rem;'>
+                    ⚠ {alerta_txt}</div>
+            </div>""", unsafe_allow_html=True)
+
+        # Preparação de ordens
+        with pan3:
+            pld_now  = st.session_state['pld_atual']
+            prox_abt = _proxima_abertura(gdt)
+            horas_ft = int((prox_abt - gdt).total_seconds() // 3600)
+            produtos_prox = _gerar_produtos(gdt)[:3]
+            linhas_prod = "".join([
+                f"<div style='display:flex;justify-content:space-between;padding:3px 0;"
+                f"border-bottom:1px solid #1e293b;font-family:JetBrains Mono,monospace;font-size:0.75rem;'>"
+                f"<span style='color:#64748b;'>{p['codigo']}</span>"
+                f"<span style='color:#e2e8f0;'>R$ {_reference_price(p,'SE/CO'):.2f}</span></div>"
+                for p in produtos_prox
+            ])
+            st.markdown(f"""<div class='card'>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;margin-bottom:0.75rem;'>🎯 Preparação de Ordens</div>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.72rem;color:#94a3b8;margin-bottom:0.5rem;'>
+                    Abertura em <b style='color:#fbbf24;'>{horas_ft}h</b> ({prox_abt.strftime('%d/%m %H:%M')})</div>
+                <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;margin-bottom:4px;text-transform:uppercase;'>Refs. de preço amanhã</div>
+                {linhas_prod}
+                <div style='margin-top:0.75rem;font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#334155;'>
+                    Use <b style='color:#94a3b8;'>📒 Livro</b> para inserir ordens-limite agora — elas entram na fila às 09:00.</div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("---")
 
     st.markdown("")
     c1, c2, c3, c4 = st.columns(4)
@@ -988,12 +1317,16 @@ elif pagina == 'livro':
 
         if sub_ord and prod_sel:
             fm, _ = _impacto_meteo_no_pld(st.session_state['meteo'])
-            if tipo_order == "Mercado (Market)":
+            horas_prod = prod_sel.get('horas_mes', 720)
+            ok_margem, msg_margem = _pode_negociar(vol_ord, horas_prod, ref)
+            if not ok_margem:
+                st.error(f"🚫 {msg_margem}")
+            elif tipo_order == "Mercado (Market)":
                 resultado, erro = _executar_ordem_mercado(tipo_ord, prod_cod_sel, vol_ord, subm_sel, gdt)
                 if erro:
                     st.error(f"⚠️ {erro}")
                 elif resultado:
-                    c = _registrar_contrato_negociado(tipo_ord, resultado["preco"], resultado["volume_mwm"], prod_sel, subm_sel, resultado["contraparte"], gdt)
+                    _registrar_contrato_negociado(tipo_ord, resultado["preco"], resultado["volume_mwm"], prod_sel, subm_sel, resultado["contraparte"], gdt)
                     log = st.session_state.get('turn_log',[])
                     log.append(f'<span class="ts">[{gdt.strftime("%d/%m %H:%M")}]</span> <span class="deal">✅ DEAL — {tipo_ord} {resultado["volume_mwm"]:.1f}MWm {prod_cod_sel} @ R${resultado["preco"]:.2f} c/ {resultado["contraparte"]}</span>')
                     st.session_state['turn_log'] = log[-50:]
@@ -1005,7 +1338,7 @@ elif pagina == 'livro':
                 cp_sel = random.choice(COUNTERPARTIES)
                 prob   = _prob_aceitar(preco_ord, ref, fm, tipo_ord, cp_sel)
                 if random.random() < prob:
-                    c = _registrar_contrato_negociado(tipo_ord, preco_ord, vol_ord, prod_sel, subm_sel, cp_sel["nome"], gdt)
+                    _registrar_contrato_negociado(tipo_ord, preco_ord, vol_ord, prod_sel, subm_sel, cp_sel["nome"], gdt)
                     log = st.session_state.get('turn_log',[])
                     log.append(f'<span class="ts">[{gdt.strftime("%d/%m %H:%M")}]</span> <span class="deal">✅ DEAL — {tipo_ord} {vol_ord:.1f}MWm {prod_cod_sel} @ R${preco_ord:.2f} c/ {cp_sel["nome"]}</span>')
                     st.session_state['turn_log'] = log[-50:]
@@ -1063,9 +1396,13 @@ elif pagina == 'rfqs':
         for rfq in ativos:
             cor_dev = "#00d4aa" if (rfq['tipo']=="Venda" and rfq['desvio_pct']<0) or (rfq['tipo']=="Compra" and rfq['desvio_pct']>0) else "#fbbf24"
             exp_em  = rfq['expira_turno'] - st.session_state['turno']
+            cp_rfq  = next((x for x in COUNTERPARTIES if x['nome']==rfq['contraparte']), {})
+            perf_rfq= cp_rfq.get('perfil', 'padrao')
+            p_labels_rfq = {"agressiva":"AGRESS","conservadora":"CONSERV","inadimplente":"INADIMP","padrao":"PADRÃO"}
+            p_lbl_rfq = p_labels_rfq.get(perf_rfq, perf_rfq.upper())
             st.markdown(f"""<div class='rfq-card'>
                 <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;'>
-                    <span style='color:#e2e8f0;font-weight:700;'>#{rfq['id']} · {rfq['contraparte']}</span>
+                    <span style='color:#e2e8f0;font-weight:700;'>#{rfq['id']} · {rfq['contraparte']}&nbsp;<span class='perfil-badge perfil-{perf_rfq}'>{p_lbl_rfq}</span></span>
                     <span style='color:#334155;font-size:0.65rem;'>Recebido {rfq['timestamp']} · Expira em {exp_em} turno(s)</span>
                 </div>
                 <div style='display:flex;gap:1.5rem;flex-wrap:wrap;'>
@@ -1084,16 +1421,20 @@ elif pagina == 'rfqs':
                     if not mkt_open:
                         st.error("Mercado fechado.")
                     else:
-                        rfq['status'] = 'aceito'
-                        tipo_c = "Compra" if rfq['tipo']=="Venda" else "Venda"
                         prod_rfq = _get_produto_by_codigo(rfq['produto_cod'], gdt)
-                        if prod_rfq:
-                            _registrar_contrato_negociado(tipo_c, rfq['preco'], rfq['volume_mwm'], prod_rfq, rfq['submercado'], rfq['contraparte'], gdt)
-                            log = st.session_state.get('turn_log',[])
-                            log.append(f'<span class="ts">[{gdt.strftime("%d/%m %H:%M")}]</span> <span class="deal">✅ RFQ #{rfq["id"]} aceito — {tipo_c} {rfq["volume_mwm"]:.1f}MWm {rfq["produto_cod"]} @ R${rfq["preco"]:.2f}</span>')
-                            st.session_state['turn_log'] = log[-50:]
-                            salvar_estado()
-                        st.rerun()
+                        ok_m, msg_m = _pode_negociar(rfq['volume_mwm'], prod_rfq.get('horas_mes', 720) if prod_rfq else 720, rfq['preco'])
+                        if not ok_m:
+                            st.error(f"🚫 {msg_m}")
+                        else:
+                            rfq['status'] = 'aceito'
+                            tipo_c = "Compra" if rfq['tipo']=="Venda" else "Venda"
+                            if prod_rfq:
+                                _registrar_contrato_negociado(tipo_c, rfq['preco'], rfq['volume_mwm'], prod_rfq, rfq['submercado'], rfq['contraparte'], gdt)
+                                log = st.session_state.get('turn_log',[])
+                                log.append(f'<span class="ts">[{gdt.strftime("%d/%m %H:%M")}]</span> <span class="deal">✅ RFQ #{rfq["id"]} aceito — {tipo_c} {rfq["volume_mwm"]:.1f}MWm {rfq["produto_cod"]} @ R${rfq["preco"]:.2f}</span>')
+                                st.session_state['turn_log'] = log[-50:]
+                                salvar_estado()
+                            st.rerun()
             with col_rc:
                 if st.button(f"❌ Recusar #{rfq['id']}", key=f"rc_{rfq['id']}", use_container_width=True):
                     rfq['status'] = 'recusado'; salvar_estado(); st.rerun()
@@ -1296,9 +1637,39 @@ elif pagina == 'portfolio':
                     <span style='font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#475569;text-transform:uppercase;'>PnL vs PLD Mensal Atual</span>
                     <span style='font-family:JetBrains Mono,monospace;font-size:1.1rem;font-weight:700;color:{pnl_cor};'>{_fmt_brl(c['pnl_atual'])}</span>
                 </div>""", unsafe_allow_html=True)
-                if st.button(f"🗑️ Remover #{c['id']}", key=f"del_{c['id']}"):
-                    st.session_state['contratos'] = [x for x in st.session_state['contratos'] if x['id']!=c['id']]
-                    salvar_estado(); st.rerun()
+                if c.get('status') not in ('liquidado', 'inadimplido'):
+                    if st.button(f"🗑️ Remover #{c['id']}", key=f"del_{c['id']}"):
+                        st.session_state['contratos'] = [x for x in st.session_state['contratos'] if x['id']!=c['id']]
+                        salvar_estado(); st.rerun()
+                else:
+                    status_cor = "#00d4aa" if c['status']=='liquidado' else "#fb7185"
+                    st.markdown(f"<div style='font-family:JetBrains Mono,monospace;font-size:0.72rem;color:{status_cor};margin-top:0.5rem;'>"
+                                f"{'✅ LIQUIDADO' if c['status']=='liquidado' else '💀 INADIMPLIDO'} · PnL Realizado: {_fmt_brl(c.get('pnl_realizado',0))}</div>",
+                                unsafe_allow_html=True)
+
+    # ── Saldo caixa + histórico de liquidações ────────────────────────────────
+    saldo    = st.session_state.get('saldo_caixa', 0.0)
+    liq_hist = st.session_state.get('liquidacoes', [])
+    if saldo != 0.0 or liq_hist:
+        st.markdown("---")
+        st.markdown("#### 💵 Caixa Realizado")
+        scor = "#00d4aa" if saldo >= 0 else "#fb7185"
+        st.markdown(f"""<div style='background:#111827;border:1px solid #1e293b;border-radius:8px;padding:1rem 1.5rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;'>
+            <div><div style='font-family:JetBrains Mono,monospace;font-size:0.6rem;color:#475569;text-transform:uppercase;'>Saldo Caixa (PnL Realizado)</div>
+                 <div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#334155;margin-top:2px;'>{len(liq_hist)} contratos liquidados/inadimplidos</div></div>
+            <div style='font-family:JetBrains Mono,monospace;font-size:1.8rem;font-weight:700;color:{scor};'>{_fmt_brl(saldo)}</div>
+        </div>""", unsafe_allow_html=True)
+        if liq_hist:
+            st.markdown("<div style='font-family:JetBrains Mono,monospace;font-size:0.65rem;color:#475569;text-transform:uppercase;margin-bottom:6px;'>Histórico de Liquidações</div>", unsafe_allow_html=True)
+            for liq in reversed(liq_hist[-15:]):
+                cls = "liquidado-row" if liq['status']=='liquidado' else "default-row"
+                icn = "✅" if liq['status']=='liquidado' else "💀"
+                cor = "#00d4aa" if liq['pnl_realizado']>=0 else "#fb7185"
+                st.markdown(f"<div class='{cls}'>{icn} <b style='color:#e2e8f0;'>{liq['nome']}</b> · "
+                            f"<span style='color:#64748b;'>{liq['contraparte']}</span> · "
+                            f"<span style='color:{cor};font-weight:700;'>{_fmt_brl(liq['pnl_realizado'])}</span> "
+                            f"<span style='color:#334155;float:right;'>{liq.get('data','')}</span></div>",
+                            unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════════════════════════
 # PnL & RESULTADO
@@ -1427,6 +1798,7 @@ elif pagina == 'contrapartes':
 
     tipos_cores = {"Vendedora": "#fb7185", "Compradora": "#00d4aa", "Ambos": "#a78bfa"}
     tipos_labels = {"Vendedora": "VEND", "Compradora": "COMP", "Ambos": "AMBOS"}
+    perfil_labels = {"agressiva": "AGRESS", "conservadora": "CONSERV", "inadimplente": "INADIMP", "padrao": "PADRÃO"}
     cps_filtrados = COUNTERPARTIES
     if filtro_tipo != "Todos":
         cps_filtrados = [cp for cp in cps_filtrados if cp['tipo'] == filtro_tipo]
@@ -1446,14 +1818,17 @@ elif pagina == 'contrapartes':
 
     st.markdown(f"**Exibindo {len(cps_filtrados)} contraparte(s)**")
     for cp in cps_filtrados:
-        cor  = tipos_cores.get(cp['tipo'], '#94a3b8')
-        label= tipos_labels.get(cp['tipo'], cp['tipo'])
-        agg  = int(cp['agressividade'] * 10)
-        barra= "█" * agg + "░" * (10-agg)
+        cor   = tipos_cores.get(cp['tipo'], '#94a3b8')
+        label = tipos_labels.get(cp['tipo'], cp['tipo'])
+        agg   = int(cp['agressividade'] * 10)
+        barra = "█" * agg + "░" * (10-agg)
+        perf  = cp.get('perfil', 'padrao')
+        p_lbl = perfil_labels.get(perf, perf.upper())
         st.markdown(f"""<div style='background:#111827;border:1px solid #1e293b;border-radius:6px;padding:0.6rem 1rem;margin-bottom:4px;
                     display:flex;align-items:center;gap:1rem;font-family:JetBrains Mono,monospace;font-size:0.75rem;'>
             <span style='color:{cor};font-weight:700;min-width:50px;'>{label}</span>
-            <span style='color:#e2e8f0;min-width:220px;'>{cp["nome"]}</span>
+            <span class='perfil-badge perfil-{perf}'>{p_lbl}</span>
+            <span style='color:#e2e8f0;min-width:180px;'>{cp["nome"]}</span>
             <span style='color:#64748b;flex:1;'>{cp["descricao"]}</span>
             <span style='color:#334155;font-size:0.65rem;'>Agressiv: <span style='color:{cor};'>{barra}</span></span>
         </div>""", unsafe_allow_html=True)
